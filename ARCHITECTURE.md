@@ -116,6 +116,8 @@ type Rule interface {
 
 Every module has an `internal/<module>/README.md` with its purpose, flow, key files and gotchas; this document only keeps the map. `simulator` has no HTTP handler or repository, so its files are split by role instead: see [internal/simulator/README.md](internal/simulator/README.md).
 
+Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/](docs/decisions/README.md).
+
 ## Boundaries
 
 1. Modules never import each other. Only `cmd/*` imports modules; modules share data only through `internal/events` contracts sent over Kafka.
