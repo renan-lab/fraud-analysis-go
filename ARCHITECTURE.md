@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/simulator`, the modules `ingestion` and `simulator`, `internal/events` and `internal/platform/{config,httpmw,ids,kafka}` exist. `cmd/worker`, `analysis`, `alerts`, Postgres and Redis usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
+Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/worker` (analysis: consumes `transactions.received`, Redis features, publishes `transactions.analyzed`), `cmd/simulator`, the modules `ingestion`, `analysis` and `simulator`, `internal/events` and `internal/platform/{config,httpmw,ids,kafka,redis}` exist. `alerts` and Postgres usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
 
 ## Overview
 
@@ -27,13 +27,13 @@ Binaries (all in `cmd/`, each wires its modules in `main.go`):
 | Binary | Runs | Talks to |
 |---|---|---|
 | `cmd/api` | `ingestion` HTTP handlers, `alerts` query handlers | Kafka (produce), Postgres (read) |
-| `cmd/worker` | `analysis` consumer, `alerts` consumer | Kafka (consume/produce), Redis, Postgres |
+| `cmd/worker` | `analysis` consumer (exists), `alerts` consumer (planned) | Kafka (consume/produce), Redis, Postgres (planned) |
 | `cmd/simulator` | `simulator` event generator | `cmd/api` over HTTP only |
 
 | Topic | Status | Producer | Consumer | Payload |
 |---|---|---|---|---|
-| `transactions.received` | implemented (created by `cmd/api` at startup) | `ingestion` | `analysis` (planned) | `events.TransactionReceived` |
-| `transactions.analyzed` | proposed; confirm before creating | `analysis` | `alerts` | `events.TransactionAnalyzed` |
+| `transactions.received` | implemented (created by `cmd/api` and `cmd/worker` at startup) | `ingestion` | `analysis` (group `WORKER_CONSUMER_GROUP`) | `events.TransactionReceived` |
+| `transactions.analyzed` | implemented (created by `cmd/worker` at startup) | `analysis` | `alerts` (planned) | `events.TransactionAnalyzed` |
 
 ### Event envelope
 
@@ -42,6 +42,7 @@ Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wr
 - Key: `transaction_id`. Headers: `event_type`, `schema_version`, `request_id`.
 - Value: `event_id` (new UUID per publish), `event_type`, `schema_version`, `received_at` (UTC), `request_id`, and `transaction` with the HTTP contract fields, `occurred_at` normalized to UTC. `transaction.location` is omitted when the client did not send it (never `{"lat":0,"lon":0}`).
 - Duplicates of a `transaction_id` produce distinct events with distinct `event_id`s: dedupe by `transaction.transaction_id`.
+- `transactions.analyzed` uses the same key and headers. Value: `event_id`, `event_type` (`transaction.analyzed`), `schema_version`, `analyzed_at`, `request_id` (copied from the received event), `transaction_id`, `account_id`, `card_id`, `amount`, `currency`, `occurred_at`, `decision` (`approve`/`review`/`block`), `score`, and `rule_results` (`rule`, `score`, `reason` of the rules that fired; `[]` when none). Golden example: `internal/events/testdata/transaction_analyzed.golden.json`. A redelivery publishes a new `event_id` with the same decision: upsert by `transaction_id`.
 
 ## Ingestion HTTP contract
 
@@ -117,18 +118,19 @@ Every response carries `X-Request-ID` (a well-formed incoming value is reused, o
 
 ```
 cmd/api/                  HTTP entrypoint; routes and middleware wiring in routes.go (exists)
-cmd/worker/               Kafka consumers entrypoint (planned)
+cmd/worker/               Kafka consumers entrypoint; rule set wiring in rules.go (exists)
 cmd/simulator/            CLI that generates simulated transactions (exists)
 internal/ingestion/       validates incoming transactions, publishes transactions.received (exists)
-internal/analysis/        consumes transactions.received, runs rules, publishes transactions.analyzed (planned)
+internal/analysis/        consumes transactions.received, runs rules, publishes transactions.analyzed (exists)
 internal/alerts/          consumes transactions.analyzed, persists decisions, serves queries (planned)
 internal/simulator/       builds realistic/fraudulent/adversarial transaction scenarios (exists)
 internal/events/          shared event contracts (types, topic names, header keys), no logic (exists)
 internal/platform/config  env var loading (exists)
 internal/platform/httpmw  request ID, access log, recover, metrics, rate limit, problem+json writer (exists)
 internal/platform/ids     UUID v4 generation (exists)
-internal/platform/kafka   franz-go wrapper: Publish, Ping, EnsureTopic, Close (exists)
-internal/platform/        postgres, redis (planned)
+internal/platform/kafka   franz-go wrapper: Producer (Publish, Ping, EnsureTopic) and group Consumer with manual commits (exists)
+internal/platform/redis   go-redis wrapper: ZRangeByScore, HGet, MULTI/EXEC Batch (exists)
+internal/platform/        postgres (planned)
 test/integration/         cross-module tests with real infra, //go:build integration (exists)
 test/e2e/                 tests against running binaries, //go:build e2e (planned)
 ```
@@ -140,16 +142,16 @@ Each module is a single package with files per layer:
 - `repository.go` / `publisher.go`: Postgres, Redis or Kafka adapters implementing those interfaces.
 - `model.go`: domain types of the module.
 
-In `analysis`, each rule lives in its own file `rule_<name>.go` and implements:
+In `analysis`, each rule lives in its own file `rule_<name>.go` and implements ([ADR 0010](docs/decisions/0010-score-transactions-with-pure-rules-over-preloaded-features.md)):
 
 ```go
 type Rule interface {
 	Name() string
-	Evaluate(ctx context.Context, tx Transaction) (RuleResult, error)
+	Evaluate(tx Transaction, f Features) RuleResult
 }
 ```
 
-`RuleResult` carries the rule name, a score and a human-readable reason. The service sums the scores of all rules and maps the total to a decision using thresholds from config. Rule parameters (limits, windows) come from config, never hardcoded.
+Rules are pure: `FeatureStore.Load` reads all Redis state into `Features` before evaluation and `FeatureStore.Record` writes the transaction after it. `RuleResult` carries the rule name, a score (0 = did not fire) and a human-readable reason. The service sums the scores of the fired rules and maps the total to a decision with `ANALYSIS_REVIEW_THRESHOLD` / `ANALYSIS_BLOCK_THRESHOLD`. Rule parameters (limits, windows, scores) come from `ANALYSIS_*` env vars, never hardcoded. Current rules and their gotchas: [internal/analysis/README.md](internal/analysis/README.md).
 
 Every module has an `internal/<module>/README.md` with its purpose, flow, key files and gotchas; this document only keeps the map. `simulator` has no HTTP handler or repository, so its files are split by role instead: see [internal/simulator/README.md](internal/simulator/README.md).
 
@@ -167,7 +169,7 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 
 - Kafka delivery is at-least-once. Every consumer MUST be idempotent, keyed by `transaction_id`. Commit offsets only after processing succeeds.
 - `transaction_id` is the Kafka message key and the idempotency key. `alerts` upserts by `transaction_id`.
-- Velocity counters in Redis must tolerate redelivery: use sorted sets with `transaction_id` as member and the event timestamp as score, so reprocessing does not double count.
+- Redis state must tolerate redelivery: sorted-set members and hash values contain `transaction_id`, scores are the event timestamp, and reads exclude the transaction being analyzed, so reprocessing neither double counts nor changes the decision ([ADR 0009](docs/decisions/0009-use-go-redis-for-analysis-feature-state.md)). `analysis` owns every key under `analysis:`.
 - Ingestion responds `202 Accepted` only after the event is published to Kafka; publish failure returns `503`. Analysis results are never returned by the ingestion endpoint.
 - Money is `int64` in minor units (cents) plus an ISO 4217 currency code. Never use floats for amounts.
 - All timestamps are UTC (`time.Time`, RFC 3339 in JSON).
@@ -184,7 +186,6 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 
 ## Open decisions
 
-- Postgres migrations tool and Postgres/Redis client libraries (Kafka: franz-go, [ADR 0004](docs/decisions/0004-use-franz-go-and-provision-topics-at-startup.md)).
-- Retry and dead-letter strategy for messages that keep failing.
-- Initial rule set and score thresholds.
-- Compose services for `cmd/worker` (today only `app`, which runs `cmd/api`).
+- Postgres migrations tool and client library (Kafka: franz-go, [ADR 0004](docs/decisions/0004-use-franz-go-and-provision-topics-at-startup.md); Redis: go-redis, [ADR 0009](docs/decisions/0009-use-go-redis-for-analysis-feature-state.md)).
+- Dead-letter strategy. Today `analysis` commits undecodable records after logging them and retries every other error forever with backoff.
+- Tuning thresholds and scores against simulator ground truth (an evaluation command is **planned**), and an optional ML scorer as one more `Rule` (**planned**).

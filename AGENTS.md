@@ -4,12 +4,12 @@
 
 Portfolio project for learning Go: fraud analysis of financial transactions. Simulated transaction events hit an ingestion API, are published to Kafka, and are analyzed asynchronously by a rule engine. Results and alerts are stored and exposed for querying.
 
-Current stage: `cmd/api` implements ingestion (`POST /transactions` validates and publishes to Kafka `transactions.received`) plus `GET /health`, `/ready`, `/metrics`; `cmd/simulator` (transaction traffic generator) is implemented. `cmd/worker` and business rules are not defined yet. Treat everything marked **planned** as direction, not existing code.
+Current stage: `cmd/api` implements ingestion (`POST /transactions` validates and publishes to Kafka `transactions.received`) plus `GET /health`, `/ready`, `/metrics`; `cmd/worker` runs `analysis` (rules + per-account baseline over Redis state, publishes `transactions.analyzed`); `cmd/simulator` (transaction traffic generator) is implemented. `alerts` (persistence and queries) is not built yet. Treat everything marked **planned** as direction, not existing code.
 
 ## Stack
 
 - Go 1.27, stdlib first (`net/http` with method-based routing, `log/slog`, `testing`)
-- Dependencies: `twmb/franz-go` (Kafka), `prometheus/client_golang` (metrics), `golang.org/x/time/rate` (rate limit); see ADRs 0004, 0006, 0007
+- Dependencies: `twmb/franz-go` (Kafka), `prometheus/client_golang` (metrics), `golang.org/x/time/rate` (rate limit), `redis/go-redis/v9` (Redis); see ADRs 0004, 0006, 0007, 0009
 - PostgreSQL 17, Redis 8, Kafka 4 (KRaft, no Zookeeper)
 - Docker Compose for local infra
 
@@ -25,6 +25,7 @@ Run from the repository root. Targets live in `Makefile`; if `make` is unavailab
 
 - Setup env: `make env` (copies `.env.example` to `.env`)
 - Run API locally: `make run` (needs infra up: `make infra`)
+- Run worker locally: `make run-worker` (`go run ./cmd/worker`, needs `make infra`); in Docker it is the Compose service `worker` (same image as `app`, entrypoint `/worker`). It creates `transactions.received` and `transactions.analyzed`, pings Redis, and exits if either is unreachable within 15 s. Env vars: `WORKER_CONSUMER_GROUP`, `REDIS_ADDR` and the `ANALYSIS_*` rule settings; defaults and meaning in `.env.example`. A new group starts at the oldest record of `transactions.received`.
 - Full stack in Docker: `make up` / `make down` / `make logs` / `make ps`
 - Tests: `make test` (`go test -race ./...`); single test: `go test -race -run TestName ./internal/<pkg>/...`
 - Integration tests (need `make infra`): `go test -race -tags=integration ./test/integration/...`. E2E (planned): `go test -race -tags=e2e ./test/e2e/...`

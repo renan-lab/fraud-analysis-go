@@ -12,3 +12,5 @@ Append-only log of why the system is the way it is. Write a new ADR from [_templ
 | [0006](0006-problem-details-errors-and-global-rate-limit.md) | Problem details errors and a global rate limit | accepted |
 | [0007](0007-expose-prometheus-metrics.md) | Expose Prometheus metrics | accepted |
 | [0008](0008-add-optional-transaction-geolocation.md) | Add optional transaction geolocation | accepted |
+| [0009](0009-use-go-redis-for-analysis-feature-state.md) | Use go-redis for analysis feature state with idempotent keys | accepted |
+| [0010](0010-score-transactions-with-pure-rules-over-preloaded-features.md) | Score transactions with pure rules over preloaded features | accepted |

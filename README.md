@@ -2,11 +2,11 @@
 
 Projeto de portfólio para análise de fraude em transações financeiras, escrito em Go.
 
-> Estágio atual: API de ingestão (`POST /transactions` valida e publica no Kafka) e simulador de transações implementados. O worker de análise e as regras de negócio serão definidos posteriormente.
+> Estágio atual: API de ingestão (`POST /transactions` valida e publica no Kafka), worker de análise (regras + baseline estatístico por conta, estado no Redis, decisão `approve`/`review`/`block` publicada em `transactions.analyzed`) e simulador de transações implementados. Persistência e consulta de alertas virão depois.
 
 ## Stack
 
-- Go 1.27 (stdlib primeiro: `net/http`, `log/slog`); dependências: `franz-go` (Kafka), `prometheus/client_golang` (métricas), `x/time/rate` (rate limit)
+- Go 1.27 (stdlib primeiro: `net/http`, `log/slog`); dependências: `franz-go` (Kafka), `prometheus/client_golang` (métricas), `x/time/rate` (rate limit), `go-redis` (Redis)
 - PostgreSQL 17
 - Redis 8
 - Kafka 4 (modo KRaft, sem Zookeeper)
@@ -16,12 +16,14 @@ Projeto de portfólio para análise de fraude em transações financeiras, escri
 
 ```
 cmd/api/              # entrypoint da API HTTP
+cmd/worker/           # entrypoint do worker de análise (consumidor Kafka)
 cmd/simulator/        # CLI do simulador de transações
 internal/ingestion/   # POST /transactions: validação e publicação no Kafka
+internal/analysis/    # motor de fraude: regras, baseline no Redis, decisão
 internal/simulator/   # gerador de tráfego realista e adversarial
 internal/events/      # contratos dos eventos Kafka
-internal/platform/    # infraestrutura compartilhada: config, kafka, middlewares HTTP, ids
-test/integration/     # testes com Kafka real (build tag integration)
+internal/platform/    # infraestrutura compartilhada: config, kafka, redis, middlewares HTTP, ids
+test/integration/     # testes com Kafka e Redis reais (build tag integration)
 docs/decisions/       # registros de decisões de arquitetura (ADRs)
 ```
 
@@ -38,7 +40,7 @@ Visão geral da arquitetura e contrato da API: [ARCHITECTURE.md](ARCHITECTURE.md
 make env      # cria .env a partir de .env.example
 ```
 
-Stack completa (app + infra) via Docker:
+Stack completa (API, worker e infra) via Docker:
 
 ```bash
 make up
@@ -76,11 +78,19 @@ Outros endpoints: `GET /health` (processo vivo), `GET /ready` (503 se o Kafka es
 
 Variáveis da ingestão (veja `.env.example`): `INGEST_PUBLISH_TIMEOUT`, `INGEST_RATE_LIMIT_RPS` (0 desativa), `INGEST_RATE_LIMIT_BURST`, `KAFKA_TOPIC_PARTITIONS`, `KAFKA_TOPIC_REPLICATION_FACTOR`.
 
+Worker de análise local (com `make infra` no ar); no `make up` ele sobe como o serviço `worker`:
+
+```bash
+make run-worker
+```
+
+Consome `transactions.received`, avalia as regras (`velocity`, `card_testing`, `impossible_travel`, `amount_outlier`, `new_device_foreign`), soma os scores e publica a decisão em `transactions.analyzed`. Limiares, janelas e scores vêm das variáveis `ANALYSIS_*` (veja `.env.example`); o consumer group vem de `WORKER_CONSUMER_GROUP`. Detalhes em [internal/analysis/README.md](internal/analysis/README.md).
+
 Testes:
 
 ```bash
 make test                                                   # unitários
-go test -race -tags=integration ./test/integration/...      # integração (precisa de make infra)
+go test -race -tags=integration ./test/integration/...      # integração com Kafka e Redis (precisa de make infra)
 ```
 
 Rode `make help` para ver todos os comandos.
