@@ -114,12 +114,7 @@ type Rule interface {
 
 `RuleResult` carries the rule name, a score and a human-readable reason. The service sums the scores of all rules and maps the total to a decision using thresholds from config. Rule parameters (limits, windows) come from config, never hardcoded.
 
-`simulator` has no HTTP handler or repository, so its files are split by role instead:
-
-- `population.go` / `catalog.go`: customers with stable habits (home country, spend, hours, devices, usual merchants) built from `--seed`.
-- `scenario_<mode>.go`: each scenario implements `Scenario` and returns one or more `Emission`s (raw body + expected status + ground-truth label). Modes: `legit`, `fraud`, `malformed`, `attack`, `duplicate`, `timing`.
-- `mix.go`: `Generator` picks a mode by `--mix` weight, then a scenario of that mode. Single goroutine, so output is reproducible per seed.
-- `runner.go`: paces emissions (rate, ramp-up, burst) into a worker pool calling a `Sender` (`sender_http.go` or dry-run `sender_ndjson.go`); `report.go` and `truth.go` observe outcomes.
+Every module has an `internal/<module>/README.md` with its purpose, flow, key files and gotchas; this document only keeps the map. `simulator` has no HTTP handler or repository, so its files are split by role instead: see [internal/simulator/README.md](internal/simulator/README.md).
 
 ## Boundaries
 
