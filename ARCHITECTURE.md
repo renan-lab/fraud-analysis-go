@@ -37,6 +37,47 @@ Topic names below are proposed; confirm before creating them.
 | `transactions.received` | `ingestion` | `analysis` | `events.TransactionReceived` |
 | `transactions.analyzed` | `analysis` | `alerts` | `events.TransactionAnalyzed` |
 
+## Ingestion HTTP contract
+
+`POST /transactions` is the only contract `simulator` knows. Status: **proposed**; `internal/simulator` generates traffic against it and `ingestion` must implement it.
+
+```json
+{
+  "transaction_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "account_id": "acc_3f9a1c2b7d4e",
+  "card_id": "card_9b2c4d6e8f10",
+  "amount": 12990,
+  "currency": "BRL",
+  "merchant": { "id": "mer_51a2b3c4d5e6", "name": "Grocery 5e6f", "mcc": "5411", "country": "BR" },
+  "channel": "card_present",
+  "device_id": "dev_0a1b2c3d4e5f",
+  "ip": "177.34.10.200",
+  "occurred_at": "2026-11-02T19:15:00Z"
+}
+```
+
+| Field | Rule |
+|---|---|
+| `transaction_id` | UUID v4, lowercase. Idempotency key. |
+| `account_id`, `card_id`, `device_id`, `merchant.id` | `^[A-Za-z0-9_-]{1,64}$` |
+| `amount` | integer `> 0`, minor units of the card currency (cardholder billing amount). Floats and strings are rejected. |
+| `currency` | ISO 4217, `^[A-Z]{3}$` |
+| `merchant.name` | 1-128 printable characters, no control or format characters |
+| `merchant.mcc` | `^[0-9]{4}$` |
+| `merchant.country` | ISO 3166-1 alpha-2, `^[A-Z]{2}$` |
+| `channel` | `card_present`, `ecommerce` or `contactless` |
+| `ip` | IPv4 or IPv6 literal |
+| `occurred_at` | RFC 3339; at most 5 minutes in the future (clock skew). Old events are accepted (late arrival). |
+
+All fields are required; unknown fields are rejected. Responses:
+
+| Status | When |
+|---|---|
+| `202 Accepted` | valid payload, including duplicates of an already accepted `transaction_id` (dedupe happens in consumers) |
+| `400 Bad Request` | invalid JSON, wrong types, missing/unknown fields, any rule above violated |
+| `413 Content Too Large` | body larger than 64 KiB |
+| `415 Unsupported Media Type` | `Content-Type` is not `application/json` |
+
 ## Codemap
 
 ```
