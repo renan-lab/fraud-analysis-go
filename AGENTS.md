@@ -36,7 +36,7 @@ Ports: API `8080`, Postgres `5432`, Redis `6379`, Kafka `29092` from host / `kaf
 
 ## Conventions
 
-Detailed rules live in `.cursor/.rules/` (do not duplicate them here):
+Detailed rules live in `.cursor/rules/` (do not duplicate them here):
 
 - `coding-standards.mdc`: style, package layout, errors, logging
 - `testing.mdc`: test conventions

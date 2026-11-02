@@ -146,7 +146,7 @@ type Rule interface {
 - Context: every I/O call receives a `context.Context`; the root context is cancelled on SIGINT/SIGTERM.
 - Shutdown: `cmd/api` drains HTTP with `Server.Shutdown`; `cmd/worker` stops fetching, finishes in-flight messages and commits offsets before exiting.
 - Errors: wrapped with `%w`; handlers and consumers are the only places that translate errors into HTTP status codes or retry/skip decisions.
-- Tests: unit tests sit next to the code in the same package; fixtures in `testdata/`. Anything that crosses modules or needs real infra lives in `test/integration` or `test/e2e` behind a build tag, and may only use what another module could use (exported API, `internal/events`). Details in `.cursor/.rules/testing.mdc`.
+- Tests: unit tests sit next to the code in the same package; fixtures in `testdata/`. Anything that crosses modules or needs real infra lives in `test/integration` or `test/e2e` behind a build tag, and may only use what another module could use (exported API, `internal/events`). Details in `.cursor/rules/testing.mdc`.
 
 ## Open decisions
 
