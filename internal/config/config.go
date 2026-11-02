@@ -14,16 +14,19 @@ type Config struct {
 	DatabaseURL     string
 	RedisAddr       string
 	KafkaBrokers    []string
+	// SimulatorTargetURL is the ingestion API base URL used by cmd/simulator.
+	SimulatorTargetURL string
 }
 
 func Load() Config {
 	return Config{
-		AppEnv:          getEnv("APP_ENV", "development"),
-		HTTPPort:        getEnv("HTTP_PORT", "8080"),
-		ShutdownTimeout: getDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
-		DatabaseURL:     getEnv("DATABASE_URL", "postgres://fraud:fraud@localhost:5432/fraud?sslmode=disable"),
-		RedisAddr:       getEnv("REDIS_ADDR", "localhost:6379"),
-		KafkaBrokers:    strings.Split(getEnv("KAFKA_BROKERS", "localhost:29092"), ","),
+		AppEnv:             getEnv("APP_ENV", "development"),
+		HTTPPort:           getEnv("HTTP_PORT", "8080"),
+		ShutdownTimeout:    getDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://fraud:fraud@localhost:5432/fraud?sslmode=disable"),
+		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		KafkaBrokers:       strings.Split(getEnv("KAFKA_BROKERS", "localhost:29092"), ","),
+		SimulatorTargetURL: getEnv("SIMULATOR_TARGET_URL", "http://localhost:8080"),
 	}
 }
 
