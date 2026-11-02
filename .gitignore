@@ -1,0 +1,19 @@
+# Binaries
+bin/
+*.exe
+*.test
+*.out
+
+# Coverage
+coverage.*
+
+# Env
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Temp
+tmp/
