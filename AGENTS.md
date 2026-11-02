@@ -40,6 +40,7 @@ Detailed rules live in `.cursor/rules/` (do not duplicate them here):
 
 - `coding-standards.mdc`: style, package layout, errors, logging
 - `testing.mdc`: test conventions
+- `documentation.mdc`: which docs to update with each feature change
 - `git-commits.mdc`: Conventional Commits in English
 
 Non-obvious points:
@@ -65,4 +66,4 @@ This is a learning project. After implementing, add a short note (1-3 bullets) e
 2. `make vet`
 3. `make test`
 4. New behavior has a test; bug fixes have a regression test.
-5. Update this file if commands changed, and `ARCHITECTURE.md` if structure or module boundaries changed.
+5. Docs updated in the same change, following `.cursor/rules/documentation.mdc`.

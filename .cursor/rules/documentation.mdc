@@ -1,0 +1,44 @@
+---
+description: Keep feature documentation (module READMEs, ARCHITECTURE.md, AGENTS.md, README.md, ADRs) up to date in the same change as the code
+alwaysApply: true
+---
+
+# Documentation
+
+A feature is not done until its docs match the code, updated in the same change (same commit, or a `docs:` commit right after it). Write for an agent that never saw this conversation: record what the code cannot tell.
+
+## One home per fact
+
+Each fact lives in one doc; others link to it instead of copying.
+
+| Doc | Holds | Update when |
+|---|---|---|
+| `internal/<module>/README.md` | module context (template below) | module behavior, files, flags, invariants change |
+| `ARCHITECTURE.md` | map: binaries, modules, topics, HTTP contracts, boundaries, invariants | a module, binary, topic, table or contract is added or changed |
+| `AGENTS.md` | commands, conventions, docs index | commands, env vars or workflow change |
+| `README.md` (Portuguese, for humans) | what the project is, how to run it | setup, commands, structure or ports change |
+| `docs/decisions/NNNN-title.md` | ADR | a choice that is expensive to reverse |
+
+Platform packages (`internal/config`, `internal/platform/*`) only need Go doc comments, not a README.
+
+## Module README
+
+English, short (aim for under 80 lines). Sections: `Purpose`, `Entry points`, `Flow`, `Key files`, `Invariants and gotchas`, `Configuration`, `Testing`, `Update when`. See `internal/simulator/README.md`.
+
+## ADRs
+
+- Write one when a future reader would pay to rediscover why: new dependency, contract shape, delivery semantics, storage, cross-module convention.
+- Copy `docs/decisions/_template.md` with the next number and add it to `docs/decisions/README.md`.
+- Accepted ADRs are never rewritten: add a new ADR and mark the old one `Superseded by NNNN`.
+
+## What to write
+
+- Do: invariants, boundaries, why something odd is odd, exact paths, commands, flags and env vars.
+- Do not: file listings or signatures readable from code, session notes, TODO logs, credentials.
+- Mark things that do not exist yet as **planned**.
+
+## Before finishing
+
+1. Check each row of the table above against the change and update what it touches.
+2. Remove statements the change made false.
+3. Verify every path and command mentioned in touched docs still exists and works.
