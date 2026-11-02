@@ -30,6 +30,7 @@ func TestTransactionReceivedWireFormat(t *testing.T) {
 			DeviceID:      "dev_0a1b2c3d4e5f",
 			IP:            "177.34.10.200",
 			OccurredAt:    time.Date(2026, 11, 2, 19, 15, 0, 0, time.UTC),
+			Location:      &Location{Lat: -23.5505, Lon: -46.6333},
 		},
 	}
 	got, err := json.MarshalIndent(ev, "", "  ")
@@ -42,5 +43,18 @@ func TestTransactionReceivedWireFormat(t *testing.T) {
 	}
 	if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace(want)) {
 		t.Fatalf("wire format changed:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestTransactionOmitsMissingLocation keeps location optional on the wire:
+// consumers must see no key at all, never {"lat":0,"lon":0}.
+func TestTransactionOmitsMissingLocation(t *testing.T) {
+	t.Parallel()
+	got, err := json.Marshal(Transaction{TransactionID: "7c9e6679-7425-40de-944b-e07fc1f90ae7"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(got, []byte(`"location"`)) {
+		t.Fatalf("marshal(no location) = %s, want no location key", got)
 	}
 }

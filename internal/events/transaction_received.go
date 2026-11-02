@@ -30,8 +30,16 @@ type Merchant struct {
 	Country string `json:"country"`
 }
 
+// Location is where the purchase happened (terminal for in-person channels,
+// device for ecommerce), in WGS 84 decimal degrees.
+type Location struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
 // Transaction is a validated transaction as accepted by ingestion.
-// Amount is in minor units of Currency; OccurredAt is UTC.
+// Amount is in minor units of Currency; OccurredAt is UTC. Location is
+// optional: nil when the client did not send it, omitted from the JSON.
 type Transaction struct {
 	TransactionID string    `json:"transaction_id"`
 	AccountID     string    `json:"account_id"`
@@ -43,6 +51,7 @@ type Transaction struct {
 	DeviceID      string    `json:"device_id"`
 	IP            string    `json:"ip"`
 	OccurredAt    time.Time `json:"occurred_at"`
+	Location      *Location `json:"location,omitempty"`
 }
 
 // TransactionReceived is the JSON value published to TopicTransactionsReceived.
