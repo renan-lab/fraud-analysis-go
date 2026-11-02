@@ -65,9 +65,11 @@ curl -i -X POST localhost:8080/transactions -H 'Content-Type: application/json' 
   "amount": 12990, "currency": "BRL",
   "merchant": {"id": "mer_51a2b3c4d5e6", "name": "Grocery 5e6f", "mcc": "5411", "country": "BR"},
   "channel": "card_present", "device_id": "dev_0a1b2c3d4e5f", "ip": "177.34.10.200",
-  "occurred_at": "2026-11-02T19:15:00Z"
+  "occurred_at": "2026-11-02T19:15:00Z",
+  "location": {"lat": -23.5505, "lon": -46.6333}
 }'
 # 202 {"transaction_id":"..."}; erros vêm como application/problem+json
+# "location" (onde a compra ocorreu) é opcional
 ```
 
 Outros endpoints: `GET /health` (processo vivo), `GET /ready` (503 se o Kafka estiver inacessível) e `GET /metrics` (Prometheus).

@@ -40,7 +40,7 @@ Binaries (all in `cmd/`, each wires its modules in `main.go`):
 Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wrap-kafka-events-in-a-versioned-json-envelope.md)). Golden example: `internal/events/testdata/transaction_received.golden.json`.
 
 - Key: `transaction_id`. Headers: `event_type`, `schema_version`, `request_id`.
-- Value: `event_id` (new UUID per publish), `event_type`, `schema_version`, `received_at` (UTC), `request_id`, and `transaction` with the HTTP contract fields, `occurred_at` normalized to UTC.
+- Value: `event_id` (new UUID per publish), `event_type`, `schema_version`, `received_at` (UTC), `request_id`, and `transaction` with the HTTP contract fields, `occurred_at` normalized to UTC. `transaction.location` is omitted when the client did not send it (never `{"lat":0,"lon":0}`).
 - Duplicates of a `transaction_id` produce distinct events with distinct `event_id`s: dedupe by `transaction.transaction_id`.
 
 ## Ingestion HTTP contract
@@ -58,7 +58,8 @@ Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wr
   "channel": "card_present",
   "device_id": "dev_0a1b2c3d4e5f",
   "ip": "177.34.10.200",
-  "occurred_at": "2026-11-02T19:15:00Z"
+  "occurred_at": "2026-11-02T19:15:00Z",
+  "location": { "lat": -23.5505, "lon": -46.6333 }
 }
 ```
 
@@ -74,8 +75,9 @@ Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wr
 | `channel` | `card_present`, `ecommerce` or `contactless` |
 | `ip` | IPv4 or IPv6 literal |
 | `occurred_at` | RFC 3339; at most 5 minutes in the future (clock skew). Old events are accepted (late arrival). |
+| `location` | Optional; absent or `null` means unknown. Where the purchase happened: the terminal for `card_present`/`contactless`, the device for `ecommerce` ([ADR 0008](docs/decisions/0008-add-optional-transaction-geolocation.md)). When sent, `lat` (number in [-90, 90]) and `lon` (number in [-180, 180]) are both required, WGS 84 decimal degrees. |
 
-All fields are required; unknown fields are rejected. Responses:
+All fields except `location` are required; unknown fields are rejected, including inside `merchant` and `location`. Responses:
 
 | Status | When |
 |---|---|
