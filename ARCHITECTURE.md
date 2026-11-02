@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/worker` (analysis: consumes `transactions.received`, Redis features, publishes `transactions.analyzed`), `cmd/simulator`, the modules `ingestion`, `analysis` and `simulator`, `internal/events` and `internal/platform/{config,httpmw,ids,kafka,redis}` exist. `alerts` and Postgres usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
+Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/worker` (analysis: consumes `transactions.received`, Redis features, publishes `transactions.analyzed`), `cmd/simulator`, `cmd/evaluator` (scores decisions against simulator ground truth), the modules `ingestion`, `analysis`, `simulator` and `evaluation`, the contract packages `internal/events` and `internal/groundtruth`, and `internal/platform/{config,httpmw,ids,kafka,redis}` exist. `alerts` and Postgres usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
 
 ## Overview
 
@@ -20,6 +20,8 @@ flowchart LR
   worker -->|"persist decisions"| pg[(Postgres)]
   client[Client] -->|"GET /alerts"| api
   api -->|read| pg
+  sim -->|"truth.ndjson"| evaluator["cmd/evaluator (CLI)"]
+  kafka -->|"reread transactions.analyzed"| evaluator
 ```
 
 Binaries (all in `cmd/`, each wires its modules in `main.go`):
@@ -28,12 +30,15 @@ Binaries (all in `cmd/`, each wires its modules in `main.go`):
 |---|---|---|
 | `cmd/api` | `ingestion` HTTP handlers, `alerts` query handlers | Kafka (produce), Postgres (read) |
 | `cmd/worker` | `analysis` consumer (exists), `alerts` consumer (planned) | Kafka (consume/produce), Redis, Postgres (planned) |
-| `cmd/simulator` | `simulator` event generator | `cmd/api` over HTTP only |
+| `cmd/simulator` | `simulator` event generator; writes the ground-truth file | `cmd/api` over HTTP only |
+| `cmd/evaluator` | `evaluation` report and CI gates | Kafka (read only, no group), truth file |
 
 | Topic | Status | Producer | Consumer | Payload |
 |---|---|---|---|---|
 | `transactions.received` | implemented (created by `cmd/api` and `cmd/worker` at startup) | `ingestion` | `analysis` (group `WORKER_CONSUMER_GROUP`) | `events.TransactionReceived` |
-| `transactions.analyzed` | implemented (created by `cmd/worker` at startup) | `analysis` | `alerts` (planned) | `events.TransactionAnalyzed` |
+| `transactions.analyzed` | implemented (created by `cmd/worker` at startup) | `analysis` | `evaluation` (no group, rereads from the start, [ADR 0011](docs/decisions/0011-evaluate-decisions-by-rereading-analyzed-topic-against-ground-truth.md)), `alerts` (planned) | `events.TransactionAnalyzed` |
+
+The ground-truth file (`simulator run --truth`) is NDJSON of `groundtruth.Record`: `transaction_id` (absent for bodies without one), `mode`, `scenario`, `label` (`legit`/`fraud`/`reject`), `expected_status`, `status` (absent on transport error) and `error`. A duplicate scenario writes one line per send. Golden example: `internal/groundtruth/testdata/records.golden.ndjson`.
 
 ### Event envelope
 
@@ -120,15 +125,18 @@ Every response carries `X-Request-ID` (a well-formed incoming value is reused, o
 cmd/api/                  HTTP entrypoint; routes and middleware wiring in routes.go (exists)
 cmd/worker/               Kafka consumers entrypoint; rule set wiring in rules.go (exists)
 cmd/simulator/            CLI that generates simulated transactions (exists)
+cmd/evaluator/            CLI that scores decisions against simulator ground truth (exists)
 internal/ingestion/       validates incoming transactions, publishes transactions.received (exists)
 internal/analysis/        consumes transactions.received, runs rules, publishes transactions.analyzed (exists)
 internal/alerts/          consumes transactions.analyzed, persists decisions, serves queries (planned)
 internal/simulator/       builds realistic/fraudulent/adversarial transaction scenarios (exists)
+internal/evaluation/      joins ground truth with transactions.analyzed, reports coverage and detection quality (exists)
 internal/events/          shared event contracts (types, topic names, header keys), no logic (exists)
+internal/groundtruth/     ground-truth file contract (Record, Label) shared by simulator and evaluation, no logic (exists)
 internal/platform/config  env var loading (exists)
 internal/platform/httpmw  request ID, access log, recover, metrics, rate limit, problem+json writer (exists)
 internal/platform/ids     UUID v4 generation (exists)
-internal/platform/kafka   franz-go wrapper: Producer (Publish, Ping, EnsureTopic) and group Consumer with manual commits (exists)
+internal/platform/kafka   franz-go wrapper: Producer (Publish, Ping, EnsureTopic), group Consumer with manual commits, groupless TopicReader (exists)
 internal/platform/redis   go-redis wrapper: ZRangeByScore, HGet, MULTI/EXEC Batch (exists)
 internal/platform/        postgres (planned)
 test/integration/         cross-module tests with real infra, //go:build integration (exists)
@@ -159,11 +167,12 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 
 ## Boundaries
 
-1. Modules never import each other. Only `cmd/*` imports modules; modules share data only through `internal/events` contracts sent over Kafka.
-2. `internal/events` and `internal/platform` never import modules.
+1. Modules never import each other. Only `cmd/*` imports modules; modules share data only through `internal/events` contracts sent over Kafka, and `simulator` and `evaluation` also through the `internal/groundtruth` file contract.
+2. `internal/events`, `internal/groundtruth` and `internal/platform` never import modules.
 3. Inside a module, dependencies go downward: handler/consumer -> service -> repository/publisher. Services never import `net/http`, Kafka or database client packages; they depend on interfaces.
 4. Each module owns its own Postgres schema (e.g. `alerts`). No module reads or writes another module's tables. `ingestion` and `analysis` own no tables initially.
-5. `simulator` only knows the public HTTP contract of the ingestion API.
+5. `simulator` only knows the public HTTP contract of the ingestion API, plus the `groundtruth` file it writes.
+6. `evaluation` never writes to Kafka or commits offsets; it only rereads `transactions.analyzed`.
 
 ## Invariants
 
@@ -188,4 +197,4 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 
 - Postgres migrations tool and client library (Kafka: franz-go, [ADR 0004](docs/decisions/0004-use-franz-go-and-provision-topics-at-startup.md); Redis: go-redis, [ADR 0009](docs/decisions/0009-use-go-redis-for-analysis-feature-state.md)).
 - Dead-letter strategy. Today `analysis` commits undecodable records after logging them and retries every other error forever with backoff.
-- Tuning thresholds and scores against simulator ground truth (an evaluation command is **planned**), and an optional ML scorer as one more `Rule` (**planned**).
+- Tuning thresholds and scores against simulator ground truth (measure with `cmd/evaluator`), and an optional ML scorer as one more `Rule` (**planned**).

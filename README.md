@@ -2,7 +2,7 @@
 
 Projeto de portfólio para análise de fraude em transações financeiras, escrito em Go.
 
-> Estágio atual: API de ingestão (`POST /transactions` valida e publica no Kafka), worker de análise (regras + baseline estatístico por conta, estado no Redis, decisão `approve`/`review`/`block` publicada em `transactions.analyzed`) e simulador de transações implementados. Persistência e consulta de alertas virão depois.
+> Estágio atual: API de ingestão (`POST /transactions` valida e publica no Kafka), worker de análise (regras + baseline estatístico por conta, estado no Redis, decisão `approve`/`review`/`block` publicada em `transactions.analyzed`), simulador de transações e avaliador (compara as decisões com o gabarito do simulador) implementados. Persistência e consulta de alertas virão depois.
 
 ## Stack
 
@@ -18,10 +18,13 @@ Projeto de portfólio para análise de fraude em transações financeiras, escri
 cmd/api/              # entrypoint da API HTTP
 cmd/worker/           # entrypoint do worker de análise (consumidor Kafka)
 cmd/simulator/        # CLI do simulador de transações
+cmd/evaluator/        # CLI que avalia as decisões contra o gabarito do simulador
 internal/ingestion/   # POST /transactions: validação e publicação no Kafka
 internal/analysis/    # motor de fraude: regras, baseline no Redis, decisão
 internal/simulator/   # gerador de tráfego realista e adversarial
+internal/evaluation/  # métricas de cobertura e qualidade das decisões
 internal/events/      # contratos dos eventos Kafka
+internal/groundtruth/ # contrato do arquivo de gabarito (truth.ndjson)
 internal/platform/    # infraestrutura compartilhada: config, kafka, redis, middlewares HTTP, ids
 test/integration/     # testes com Kafka e Redis reais (build tag integration)
 docs/decisions/       # registros de decisões de arquitetura (ADRs)
@@ -106,6 +109,19 @@ go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.n
 ```
 
 O destino HTTP vem de `SIMULATOR_TARGET_URL` (padrão `http://localhost:8080`). O relatório (status, latências p50/p95/p99, violações de expectativa) sai no stderr. Com rate limit ativo, respostas 429 aparecem como violações; para testes de carga deixe `INGEST_RATE_LIMIT_RPS=0`. Detalhes em [internal/simulator/README.md](internal/simulator/README.md).
+
+## Avaliando as decisões
+
+Com a stack no ar (`make up`), rode o simulador com `--truth` e depois o avaliador sobre o mesmo arquivo:
+
+```bash
+go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.ndjson
+make evaluate                                                                  # mesmo que --truth=truth.ndjson (TRUTH=arquivo muda)
+go run ./cmd/evaluator --truth=truth.ndjson --format=json                       # para scripts
+go run ./cmd/evaluator --truth=truth.ndjson --min-sequence-recall=0.9 --max-fpr=0.05   # sai com código 1 se violar
+```
+
+O avaliador relê o tópico `transactions.analyzed` desde o início (sem consumer group, sem commit) e espera até `--wait` (30 s) pelas decisões que faltam. O relatório mostra cobertura e idempotência do pipeline, precisão/recall/taxa de falsos positivos por transação, detecção por sequência de fraude (cenário x cartão), disparos por regra e a causa das legítimas sinalizadas. Detalhes em [internal/evaluation/README.md](internal/evaluation/README.md).
 
 ## Portas
 

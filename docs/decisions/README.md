@@ -14,3 +14,4 @@ Append-only log of why the system is the way it is. Write a new ADR from [_templ
 | [0008](0008-add-optional-transaction-geolocation.md) | Add optional transaction geolocation | accepted |
 | [0009](0009-use-go-redis-for-analysis-feature-state.md) | Use go-redis for analysis feature state with idempotent keys | accepted |
 | [0010](0010-score-transactions-with-pure-rules-over-preloaded-features.md) | Score transactions with pure rules over preloaded features | accepted |
+| [0011](0011-evaluate-decisions-by-rereading-analyzed-topic-against-ground-truth.md) | Evaluate decisions by rereading the analyzed topic against ground truth | accepted |

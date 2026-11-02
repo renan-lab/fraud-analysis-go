@@ -31,7 +31,7 @@ Scores every transaction from `transactions.received` and publishes `approve`, `
 - `amount_outlier` stays silent until the account has `ANALYSIS_OUTLIER_MIN_SAMPLES` past amounts. `impossible_travel` stays silent without a location on both sides.
 - Undecodable records (bad JSON, unknown `event_type`/`schema_version`, no `transaction_id`) are logged and committed (no DLQ yet). Any other error is retried with backoff (100 ms doubling to 5 s) and never committed. On SIGINT the attempt in progress finishes within `ANALYSIS_PROCESS_TIMEOUT`.
 - Malformed Redis members are skipped on read: less history instead of a stuck partition.
-- Scores interact: tune `ANALYSIS_*` against `cmd/simulator --truth` output, not one rule at a time.
+- Scores interact: tune `ANALYSIS_*` against `cmd/simulator --truth` output with `cmd/evaluator`, not one rule at a time.
 
 ## Configuration
 

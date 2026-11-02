@@ -8,7 +8,7 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 
 - `go run ./cmd/simulator scenarios`: lists every scenario with its mode and expected status.
 - `go run ./cmd/simulator run [flags]`: generates traffic; `run -h` lists flags. `--target=ndjson` (default) is a dry run to `--out`; `--target=http` posts to `SIMULATOR_TARGET_URL`.
-- The report goes to stderr; `--truth=<file>` writes one ground-truth NDJSON line per send.
+- The report goes to stderr; `--truth=<file>` writes one ground-truth NDJSON line per send. The line format is `groundtruth.Record` (`internal/groundtruth`), read back by `cmd/evaluator`.
 
 ## Flow
 
@@ -18,7 +18,7 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 
 - `catalog.go`, `population.go`: countries (with reference-city coordinates), merchant categories and customers with stable habits (home country, spend, local hours, devices, usual merchants).
 - `scenario.go`: `Scenario` interface and `Catalog()`. One file per mode: `scenario_legit.go`, `scenario_fraud.go`, `scenario_malformed.go`, `scenario_attack.go`, `scenario_duplicate.go`, `scenario_timing.go`.
-- `model.go`: `Transaction` (contract payload) and `Emission` (raw body, expected status, label, copies).
+- `model.go`: `Transaction` (contract payload) and `Emission` (raw body, expected status, label, copies). `Label` is an alias of `groundtruth.Label`.
 - `mix.go`: `--mix` parsing and `Generator`.
 - `runner.go`: pacing, worker pool, shutdown; declares `Sender`, `EmissionSource`, `Observer`.
 - `sender_http.go`, `sender_ndjson.go`, `report.go`, `truth.go`.
@@ -45,4 +45,4 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 
 ## Update when
 
-A scenario, mode, flag, report field or ground-truth field is added or changed, or the ingestion contract changes.
+A scenario, mode, flag, report field or ground-truth field is added or changed (a truth field change also touches `internal/groundtruth` and `internal/evaluation`), or the ingestion contract changes.
