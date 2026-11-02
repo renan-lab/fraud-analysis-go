@@ -4,7 +4,7 @@
 
 Portfolio project for learning Go: fraud analysis of financial transactions. Simulated transaction events hit an ingestion API, are published to Kafka, and are analyzed asynchronously by a rule engine. Results and alerts are stored and exposed for querying.
 
-Current stage: bootstrap only (`GET /health`). Business rules are not defined yet. Treat everything marked **planned** as direction, not existing code.
+Current stage: `cmd/api` serves only `GET /health`; `cmd/simulator` (transaction traffic generator) is implemented. Business rules are not defined yet. Treat everything marked **planned** as direction, not existing code.
 
 ## Stack
 
@@ -28,6 +28,7 @@ Run from the repository root. Targets live in `Makefile`; if `make` is unavailab
 - Tests: `make test` (`go test -race ./...`); single test: `go test -race -run TestName ./internal/<pkg>/...`
 - Format: `make fmt`; static analysis: `make vet`
 - Health check: `curl localhost:8080/health`
+- Simulator: `go run ./cmd/simulator scenarios` lists scenarios; `go run ./cmd/simulator run -h` lists flags. Dry run to stdout: `go run ./cmd/simulator run --count=50`. Against the API (`SIMULATOR_TARGET_URL`): `go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.ndjson`. Same `--seed` and flags reproduce the same traffic (except wall-clock timestamps).
 
 Ports: API `8080`, Postgres `5432`, Redis `6379`, Kafka `29092` from host / `kafka:9092` inside Compose.
 

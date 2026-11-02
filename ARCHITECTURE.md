@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-11-02. Most of this document is **planned**: today only `cmd/api` with `GET /health` and `internal/config` exist. Update this file when a module boundary, binary, topic or data ownership changes.
+Last reviewed: 2026-11-02. Most of this document is **planned**: today only `cmd/api` with `GET /health`, `internal/config`, and `cmd/simulator` with `internal/simulator` exist. Update this file when a module boundary, binary, topic or data ownership changes.
 
 ## Overview
 
@@ -83,11 +83,11 @@ All fields are required; unknown fields are rejected. Responses:
 ```
 cmd/api/               HTTP entrypoint (exists)
 cmd/worker/            Kafka consumers entrypoint
-cmd/simulator/         CLI that generates simulated transactions
+cmd/simulator/         CLI that generates simulated transactions (exists)
 internal/ingestion/    validates incoming transactions, publishes transactions.received
 internal/analysis/     consumes transactions.received, runs rules, publishes transactions.analyzed
 internal/alerts/       consumes transactions.analyzed, persists decisions, serves queries
-internal/simulator/    builds realistic/fraudulent transaction scenarios
+internal/simulator/    builds realistic/fraudulent/adversarial transaction scenarios (exists)
 internal/events/       shared event contracts (types + topic names), no logic
 internal/platform/     shared infrastructure: config, logging, postgres, kafka, redis
 ```
@@ -111,6 +111,13 @@ type Rule interface {
 ```
 
 `RuleResult` carries the rule name, a score and a human-readable reason. The service sums the scores of all rules and maps the total to a decision using thresholds from config. Rule parameters (limits, windows) come from config, never hardcoded.
+
+`simulator` has no HTTP handler or repository, so its files are split by role instead:
+
+- `population.go` / `catalog.go`: customers with stable habits (home country, spend, hours, devices, usual merchants) built from `--seed`.
+- `scenario_<mode>.go`: each scenario implements `Scenario` and returns one or more `Emission`s (raw body + expected status + ground-truth label). Modes: `legit`, `fraud`, `malformed`, `attack`, `duplicate`, `timing`.
+- `mix.go`: `Generator` picks a mode by `--mix` weight, then a scenario of that mode. Single goroutine, so output is reproducible per seed.
+- `runner.go`: paces emissions (rate, ramp-up, burst) into a worker pool calling a `Sender` (`sender_http.go` or dry-run `sender_ndjson.go`); `report.go` and `truth.go` observe outcomes.
 
 ## Boundaries
 
