@@ -8,6 +8,15 @@ alwaysApply: true
 - Run tests with: `go test -race ./...` (`make test`). Use `go test -run TestName ./path/...` to run a single test.
 - Every new function gets a test. Bug fixes get a regression test.
 - Use the standard `testing` package. Tests live next to the code in `*_test.go` files.
+
+## Where tests go
+
+- Unit tests: `internal/<module>/<file>_test.go`, same package (white-box). Do not move them to a `tests/` subfolder: that becomes a separate package that only sees exported identifiers, and `go test ./internal/<module>` stops running it.
+- Shared helpers and fakes of a module: `internal/<module>/helpers_test.go` (unexported, never imported by other packages).
+- Fixtures and golden files: `internal/<module>/testdata/` (ignored by the go tool when building).
+- Cross-module integration tests (real Kafka/Postgres/Redis): `test/integration/`, guarded by `//go:build integration`. They use only the public API of modules and `internal/events` contracts, like any other consumer.
+- End-to-end tests against running binaries (e.g. `cmd/simulator` -> `cmd/api`): `test/e2e/`, guarded by `//go:build e2e`.
+- Run gated suites with `go test -race -tags=integration ./test/integration/...` (or `-tags=e2e ./test/e2e/...`); plain `go test ./...` stays fast and needs no infra.
 - Prefer table-driven tests with `t.Run` subtests; call `t.Parallel()` when the test has no shared state.
 - Mock external I/O (API, DB, Kafka, Redis, filesystem) with named fake structs implementing small interfaces, not inline stubs. Use `net/http/httptest` for HTTP handlers and servers.
 - Use `t.Helper()` in test helpers, `t.Cleanup()` for teardown, `t.TempDir()` for files and `t.Setenv()` for env vars.

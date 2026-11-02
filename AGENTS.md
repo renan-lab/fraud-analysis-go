@@ -26,9 +26,11 @@ Run from the repository root. Targets live in `Makefile`; if `make` is unavailab
 - Run API locally: `make run` (needs infra up: `make infra`)
 - Full stack in Docker: `make up` / `make down` / `make logs` / `make ps`
 - Tests: `make test` (`go test -race ./...`); single test: `go test -race -run TestName ./internal/<pkg>/...`
+- Integration/e2e tests (planned, need infra): `go test -race -tags=integration ./test/integration/...`, `go test -race -tags=e2e ./test/e2e/...`
 - Format: `make fmt`; static analysis: `make vet`
 - Health check: `curl localhost:8080/health`
 - Simulator: `go run ./cmd/simulator scenarios` lists scenarios; `go run ./cmd/simulator run -h` lists flags. Dry run to stdout: `go run ./cmd/simulator run --count=50`. Against the API (`SIMULATOR_TARGET_URL`): `go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.ndjson`. Same `--seed` and flags reproduce the same traffic (except wall-clock timestamps).
+- `-race` needs cgo and a C compiler (`gcc`); without it, `go test ./...` runs the tests without the race detector.
 
 Ports: API `8080`, Postgres `5432`, Redis `6379`, Kafka `29092` from host / `kafka:9092` inside Compose.
 
