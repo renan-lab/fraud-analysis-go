@@ -3,7 +3,9 @@ export
 
 BINARY := bin/api
 
-.PHONY: help env run run-worker build test fmt vet tidy up infra down logs ps clean
+TRUTH ?= truth.ndjson
+
+.PHONY: help env run run-worker evaluate build test fmt vet tidy up infra down logs ps clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-11s %s\n", $$1, $$2}'
@@ -16,6 +18,9 @@ run: ## Run the API locally
 
 run-worker: ## Run the analysis worker locally
 	go run ./cmd/worker
+
+evaluate: ## Score decisions against TRUTH (default truth.ndjson)
+	go run ./cmd/evaluator --truth=$(TRUTH)
 
 build: ## Build the API binary
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/api
