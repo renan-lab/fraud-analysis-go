@@ -1,0 +1,6 @@
+{"mode":"malformed","scenario":"malformed/empty_body","label":"reject","expected_status":400,"status":400}
+{"transaction_id":"t1","mode":"legit","scenario":"legit/purchase","label":"legit","expected_status":202,"status":202}
+{"transaction_id":"t2","mode":"fraud","scenario":"fraud/velocity","label":"fraud","expected_status":202,"status":202}
+{"transaction_id":"t2","mode":"duplicate","scenario":"duplicate/replay","label":"legit","expected_status":202,"status":202}
+{"transaction_id":"t3","mode":"attack","scenario":"attack/sql_injection","label":"reject","expected_status":400,"status":400}
+{"transaction_id":"t4","mode":"legit","scenario":"legit/purchase","label":"legit","expected_status":202,"error":"timeout"}
