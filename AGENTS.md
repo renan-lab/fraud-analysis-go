@@ -4,11 +4,12 @@
 
 Portfolio project for learning Go: fraud analysis of financial transactions. Simulated transaction events hit an ingestion API, are published to Kafka, and are analyzed asynchronously by a rule engine. Results and alerts are stored and exposed for querying.
 
-Current stage: `cmd/api` serves only `GET /health`; `cmd/simulator` (transaction traffic generator) is implemented. Business rules are not defined yet. Treat everything marked **planned** as direction, not existing code.
+Current stage: `cmd/api` implements ingestion (`POST /transactions` validates and publishes to Kafka `transactions.received`) plus `GET /health`, `/ready`, `/metrics`; `cmd/simulator` (transaction traffic generator) is implemented. `cmd/worker` and business rules are not defined yet. Treat everything marked **planned** as direction, not existing code.
 
 ## Stack
 
 - Go 1.27, stdlib first (`net/http` with method-based routing, `log/slog`, `testing`)
+- Dependencies: `twmb/franz-go` (Kafka), `prometheus/client_golang` (metrics), `golang.org/x/time/rate` (rate limit); see ADRs 0004, 0006, 0007
 - PostgreSQL 17, Redis 8, Kafka 4 (KRaft, no Zookeeper)
 - Docker Compose for local infra
 
@@ -26,9 +27,10 @@ Run from the repository root. Targets live in `Makefile`; if `make` is unavailab
 - Run API locally: `make run` (needs infra up: `make infra`)
 - Full stack in Docker: `make up` / `make down` / `make logs` / `make ps`
 - Tests: `make test` (`go test -race ./...`); single test: `go test -race -run TestName ./internal/<pkg>/...`
-- Integration/e2e tests (planned, need infra): `go test -race -tags=integration ./test/integration/...`, `go test -race -tags=e2e ./test/e2e/...`
+- Integration tests (need `make infra`): `go test -race -tags=integration ./test/integration/...`. E2E (planned): `go test -race -tags=e2e ./test/e2e/...`
 - Format: `make fmt`; static analysis: `make vet`
-- Health check: `curl localhost:8080/health`
+- Health/readiness/metrics: `curl localhost:8080/health`, `curl localhost:8080/ready` (503 when Kafka is unreachable), `curl localhost:8080/metrics`
+- `cmd/api` needs Kafka at startup (creates `transactions.received`, exits after 15 s if unreachable). Env vars: `KAFKA_BROKERS`, `KAFKA_TOPIC_PARTITIONS`, `KAFKA_TOPIC_REPLICATION_FACTOR`, `INGEST_PUBLISH_TIMEOUT`, `INGEST_RATE_LIMIT_RPS` (0 = off), `INGEST_RATE_LIMIT_BURST`; defaults in `.env.example`.
 - Simulator: `go run ./cmd/simulator scenarios` lists scenarios; `go run ./cmd/simulator run -h` lists flags. Dry run to stdout: `go run ./cmd/simulator run --count=50`. Against the API (`SIMULATOR_TARGET_URL`): `go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.ndjson`. Same `--seed` and flags reproduce the same traffic (except wall-clock timestamps).
 - `-race` needs cgo and a C compiler (`gcc`); without it, `go test ./...` runs the tests without the race detector.
 
@@ -55,7 +57,7 @@ Detailed rules live in `.cursor/rules/` (do not duplicate them here):
 Non-obvious points:
 
 - Prefer the stdlib. Add a third-party library only when the stdlib does not cover it well (e.g. Postgres, Kafka, Redis drivers).
-- Config comes only from env vars via `internal/config`. Never read `os.Getenv` elsewhere. Add new vars to `.env.example`.
+- Config comes only from env vars via `internal/platform/config`. Never read `os.Getenv` elsewhere. Add new vars to `.env.example`.
 - Never commit `.env` or real credentials.
 
 ## Learning mode

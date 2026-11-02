@@ -19,7 +19,7 @@ Each fact lives in one doc; others link to it instead of copying.
 | `README.md` (Portuguese, for humans) | what the project is, how to run it | setup, commands, structure or ports change |
 | `docs/decisions/NNNN-title.md` | ADR | a choice that is expensive to reverse |
 
-Platform packages (`internal/config`, `internal/platform/*`) only need Go doc comments, not a README.
+Platform packages (`internal/platform/*`) and contract packages (`internal/events`) only need Go doc comments, not a README.
 
 ## Module README
 

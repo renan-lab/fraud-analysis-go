@@ -28,13 +28,14 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 - Expected statuses mirror the contract. If the contract in `ARCHITECTURE.md` changes, update the scenarios and `contractStatus` in `helpers_test.go`; `TestScenariosExpectStatusDefinedByContract` checks every scenario against it.
 - `Generator` runs in one goroutine with one `*rand.Rand`: same `--seed` and flags give the same traffic, except timestamps taken from the wall clock.
 - `--time-scale > 1` starts simulated time `--lookback` in the past and never passes wall time. `timing/future` and `timing/within_skew` shift from wall time, because the API checks skew against its own clock.
+- `429` (rate limit) and `503` (Kafka not acknowledging) depend on load and broker health, not on the payload, so no scenario expects them and `contractStatus` ignores them. They show up as expectation violations: run load tests with `INGEST_RATE_LIMIT_RPS=0` (the default) or a limit above `--rate`.
 - Duplicates expect `202` (dedupe happens in consumers). `concurrent_retry` sends `Copies` identical requests, so the report's `sent` counts requests, not scenarios.
 - Dry-run sends have status 0: latency and expectation checks are skipped.
 - Sends use `context.WithoutCancel`: Ctrl+C stops new emissions but lets in-flight requests finish before the report prints.
 
 ## Configuration
 
-- `SIMULATOR_TARGET_URL` (default `http://localhost:8080`), read by `internal/config`.
+- `SIMULATOR_TARGET_URL` (default `http://localhost:8080`), read by `internal/platform/config`.
 - Everything else is a `run` flag.
 
 ## Testing

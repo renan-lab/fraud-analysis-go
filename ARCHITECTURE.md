@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-11-02. Most of this document is **planned**: today only `cmd/api` with `GET /health`, `internal/config`, and `cmd/simulator` with `internal/simulator` exist. Update this file when a module boundary, binary, topic or data ownership changes.
+Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/simulator`, the modules `ingestion` and `simulator`, `internal/events` and `internal/platform/{config,httpmw,ids,kafka}` exist. `cmd/worker`, `analysis`, `alerts`, Postgres and Redis usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
 
 ## Overview
 
@@ -30,16 +30,22 @@ Binaries (all in `cmd/`, each wires its modules in `main.go`):
 | `cmd/worker` | `analysis` consumer, `alerts` consumer | Kafka (consume/produce), Redis, Postgres |
 | `cmd/simulator` | `simulator` event generator | `cmd/api` over HTTP only |
 
-Topic names below are proposed; confirm before creating them.
+| Topic | Status | Producer | Consumer | Payload |
+|---|---|---|---|---|
+| `transactions.received` | implemented (created by `cmd/api` at startup) | `ingestion` | `analysis` (planned) | `events.TransactionReceived` |
+| `transactions.analyzed` | proposed; confirm before creating | `analysis` | `alerts` | `events.TransactionAnalyzed` |
 
-| Topic | Producer | Consumer | Payload |
-|---|---|---|---|
-| `transactions.received` | `ingestion` | `analysis` | `events.TransactionReceived` |
-| `transactions.analyzed` | `analysis` | `alerts` | `events.TransactionAnalyzed` |
+### Event envelope
+
+Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wrap-kafka-events-in-a-versioned-json-envelope.md)). Golden example: `internal/events/testdata/transaction_received.golden.json`.
+
+- Key: `transaction_id`. Headers: `event_type`, `schema_version`, `request_id`.
+- Value: `event_id` (new UUID per publish), `event_type`, `schema_version`, `received_at` (UTC), `request_id`, and `transaction` with the HTTP contract fields, `occurred_at` normalized to UTC.
+- Duplicates of a `transaction_id` produce distinct events with distinct `event_id`s: dedupe by `transaction.transaction_id`.
 
 ## Ingestion HTTP contract
 
-`POST /transactions` is the only contract `simulator` knows. Status: **proposed**; `internal/simulator` generates traffic against it and `ingestion` must implement it.
+`POST /transactions` is the only contract `simulator` knows. Status: **implemented** by `internal/ingestion`; `internal/simulator` generates traffic against it.
 
 ```json
 {
@@ -73,28 +79,57 @@ All fields are required; unknown fields are rejected. Responses:
 
 | Status | When |
 |---|---|
-| `202 Accepted` | valid payload, including duplicates of an already accepted `transaction_id` (dedupe happens in consumers) |
-| `400 Bad Request` | invalid JSON, wrong types, missing/unknown fields, any rule above violated |
+| `202 Accepted` | valid payload, published and acknowledged by Kafka, including duplicates of an already accepted `transaction_id` (dedupe happens in consumers). Body `{"transaction_id": "..."}` |
+| `400 Bad Request` | invalid JSON, wrong types, missing/unknown fields, trailing data after the object, any rule above violated |
 | `413 Content Too Large` | body larger than 64 KiB |
-| `415 Unsupported Media Type` | `Content-Type` is not `application/json` |
+| `415 Unsupported Media Type` | `Content-Type` is not `application/json` (parameters such as `charset` are allowed) |
+| `429 Too Many Requests` | global rate limit exceeded (`INGEST_RATE_LIMIT_RPS`, disabled by default), with `Retry-After` |
+| `503 Service Unavailable` | Kafka did not acknowledge within `INGEST_PUBLISH_TIMEOUT`, with `Retry-After`; retrying with the same `transaction_id` is safe |
+
+Checks run in this order: rate limit, `Content-Type`, size, JSON decoding, field rules. `429` and `503` depend on load and broker health, never on the payload, so simulator scenarios do not expect them.
+
+Every response carries `X-Request-ID` (a well-formed incoming value is reused, otherwise a UUID v4 is generated). Every error body is `application/problem+json` ([ADR 0006](docs/decisions/0006-problem-details-errors-and-global-rate-limit.md)):
+
+```json
+{
+  "type": "/problems/validation",
+  "title": "Invalid transaction",
+  "status": 400,
+  "instance": "/transactions",
+  "request_id": "82bb82b3-129c-4d9a-b6d0-c3599769873a",
+  "errors": [{ "field": "merchant.mcc", "detail": "\"54\" must be a 4-digit MCC" }]
+}
+```
+
+`type` values: `/problems/validation` (field rules; lists all violations), `/problems/malformed-body` (JSON syntax, types, unknown fields, empty body; `errors` set when a field is known), `/problems/body-too-large`, `/problems/unsupported-media-type`, `/problems/rate-limited`, `/problems/publish-unavailable`, `/problems/internal`.
+
+### Operational endpoints
+
+| Endpoint | Answers |
+|---|---|
+| `GET /health` | `200 {"status":"ok"}` while the process runs (liveness) |
+| `GET /ready` | `200 {"status":"ready"}` if a Kafka broker answers within 2 s, else `503` problem (readiness) |
+| `GET /metrics` | Prometheus text format ([ADR 0007](docs/decisions/0007-expose-prometheus-metrics.md)): `http_requests_total`, `http_request_duration_seconds`, `ingestion_publish_duration_seconds`, Go runtime and process metrics |
 
 ## Codemap
 
 ```
-cmd/api/               HTTP entrypoint (exists)
-cmd/worker/            Kafka consumers entrypoint
-cmd/simulator/         CLI that generates simulated transactions (exists)
-internal/ingestion/    validates incoming transactions, publishes transactions.received
-internal/analysis/     consumes transactions.received, runs rules, publishes transactions.analyzed
-internal/alerts/       consumes transactions.analyzed, persists decisions, serves queries
-internal/simulator/    builds realistic/fraudulent/adversarial transaction scenarios (exists)
-internal/events/       shared event contracts (types + topic names), no logic
-internal/platform/     shared infrastructure: config, logging, postgres, kafka, redis
-test/integration/      cross-module tests with real infra, //go:build integration (planned)
-test/e2e/              tests against running binaries, //go:build e2e (planned)
+cmd/api/                  HTTP entrypoint; routes and middleware wiring in routes.go (exists)
+cmd/worker/               Kafka consumers entrypoint (planned)
+cmd/simulator/            CLI that generates simulated transactions (exists)
+internal/ingestion/       validates incoming transactions, publishes transactions.received (exists)
+internal/analysis/        consumes transactions.received, runs rules, publishes transactions.analyzed (planned)
+internal/alerts/          consumes transactions.analyzed, persists decisions, serves queries (planned)
+internal/simulator/       builds realistic/fraudulent/adversarial transaction scenarios (exists)
+internal/events/          shared event contracts (types, topic names, header keys), no logic (exists)
+internal/platform/config  env var loading (exists)
+internal/platform/httpmw  request ID, access log, recover, metrics, rate limit, problem+json writer (exists)
+internal/platform/ids     UUID v4 generation (exists)
+internal/platform/kafka   franz-go wrapper: Publish, Ping, EnsureTopic, Close (exists)
+internal/platform/        postgres, redis (planned)
+test/integration/         cross-module tests with real infra, //go:build integration (exists)
+test/e2e/                 tests against running binaries, //go:build e2e (planned)
 ```
-
-`internal/config` exists today and moves to `internal/platform/config` when `platform` is created.
 
 Each module is a single package with files per layer:
 
@@ -147,7 +182,7 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 
 ## Open decisions
 
-- Postgres migrations tool and Kafka/Postgres/Redis client libraries.
+- Postgres migrations tool and Postgres/Redis client libraries (Kafka: franz-go, [ADR 0004](docs/decisions/0004-use-franz-go-and-provision-topics-at-startup.md)).
 - Retry and dead-letter strategy for messages that keep failing.
 - Initial rule set and score thresholds.
 - Compose services for `cmd/worker` (today only `app`, which runs `cmd/api`).
