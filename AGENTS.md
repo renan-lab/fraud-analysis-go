@@ -43,6 +43,15 @@ Detailed rules live in `.cursor/rules/` (do not duplicate them here):
 - `documentation.mdc`: which docs to update with each feature change
 - `git-commits.mdc`: Conventional Commits in English
 
+## Docs index
+
+| Topic | Document |
+|---|---|
+| Setup and usage (Portuguese, for humans) | `README.md` |
+| System map, HTTP contract, boundaries, invariants | `ARCHITECTURE.md` |
+| Module context (flow, key files, gotchas) | `internal/<module>/README.md` |
+| Why things are the way they are | `docs/decisions/` (ADRs) |
+
 Non-obvious points:
 
 - Prefer the stdlib. Add a third-party library only when the stdlib does not cover it well (e.g. Postgres, Kafka, Redis drivers).

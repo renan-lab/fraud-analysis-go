@@ -2,7 +2,7 @@
 
 Projeto de portfólio para análise de fraude em transações financeiras, escrito em Go.
 
-> Estágio atual: esqueleto inicial. Arquitetura e regras de negócio serão definidas posteriormente.
+> Estágio atual: API com `GET /health` e simulador de transações implementado. Regras de negócio serão definidas posteriormente.
 
 ## Stack
 
@@ -15,9 +15,14 @@ Projeto de portfólio para análise de fraude em transações financeiras, escri
 ## Estrutura
 
 ```
-cmd/api/            # entrypoint da API HTTP
-internal/config/    # configuração via variáveis de ambiente
+cmd/api/              # entrypoint da API HTTP
+cmd/simulator/        # CLI do simulador de transações
+internal/config/      # configuração via variáveis de ambiente
+internal/simulator/   # gerador de tráfego realista e adversarial
+docs/decisions/       # registros de decisões de arquitetura (ADRs)
 ```
+
+Visão geral da arquitetura e contrato da API: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Pré-requisitos
 
@@ -47,6 +52,18 @@ make run
 ```
 
 Rode `make help` para ver todos os comandos.
+
+## Simulador de transações
+
+Gera tráfego realista (clientes com perfil) e adversarial (fraudes, payloads malformados, ataques, duplicados, timestamps inválidos, picos de carga) contra `POST /transactions`.
+
+```bash
+go run ./cmd/simulator scenarios            # lista os cenários e o status esperado
+go run ./cmd/simulator run --count=50       # dry-run: imprime NDJSON no stdout
+go run ./cmd/simulator run --target=http --rate=50 --duration=1m --truth=truth.ndjson
+```
+
+O destino HTTP vem de `SIMULATOR_TARGET_URL` (padrão `http://localhost:8080`). O relatório (status, latências p50/p95/p99, violações de expectativa) sai no stderr. Detalhes em [internal/simulator/README.md](internal/simulator/README.md).
 
 ## Portas
 
