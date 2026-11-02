@@ -1,0 +1,2 @@
+{"transaction_id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","mode":"fraud","scenario":"fraud/velocity","label":"fraud","expected_status":202,"status":202}
+{"mode":"malformed","scenario":"malformed/empty_body","label":"reject","expected_status":400,"error":"timeout"}

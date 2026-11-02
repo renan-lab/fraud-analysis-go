@@ -5,24 +5,17 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/renan-lab/fraud-analysis-go/internal/groundtruth"
 )
 
 // TruthWriter records the expected label of every sent emission as NDJSON, to
-// compare later with the decisions the analysis pipeline produced.
+// compare later with the decisions the analysis pipeline produced. The line
+// format is groundtruth.Record.
 type TruthWriter struct {
 	mu  sync.Mutex
 	enc *json.Encoder
 	err error
-}
-
-type truthRecord struct {
-	TransactionID  string `json:"transaction_id,omitempty"`
-	Mode           Mode   `json:"mode"`
-	Scenario       string `json:"scenario"`
-	Label          Label  `json:"label"`
-	ExpectedStatus int    `json:"expected_status"`
-	Status         int    `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
 }
 
 // NewTruthWriter writes to w.
@@ -34,9 +27,9 @@ func NewTruthWriter(w io.Writer) *TruthWriter {
 
 // Observe writes one line per outcome; the first write error is kept for Err.
 func (t *TruthWriter) Observe(o Outcome) {
-	rec := truthRecord{
+	rec := groundtruth.Record{
 		TransactionID:  o.Emission.TransactionID,
-		Mode:           o.Emission.Mode,
+		Mode:           string(o.Emission.Mode),
 		Scenario:       o.Emission.Scenario,
 		Label:          o.Emission.Label,
 		ExpectedStatus: o.Emission.ExpectedStatus,

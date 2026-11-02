@@ -9,6 +9,8 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"time"
+
+	"github.com/renan-lab/fraud-analysis-go/internal/groundtruth"
 )
 
 // Mode groups scenarios by the kind of pressure they put on the service.
@@ -26,13 +28,14 @@ const (
 // Modes lists every mode in a stable order, used for parsing and reporting.
 var Modes = []Mode{ModeLegit, ModeFraud, ModeMalformed, ModeAttack, ModeDuplicate, ModeTiming}
 
-// Label is the ground truth the analysis pipeline is expected to reach.
-type Label string
+// Label is the ground truth the analysis pipeline is expected to reach. It is
+// an alias so the truth file contract lives in internal/groundtruth.
+type Label = groundtruth.Label
 
 const (
-	LabelLegit  Label = "legit"
-	LabelFraud  Label = "fraud"
-	LabelReject Label = "reject"
+	LabelLegit  = groundtruth.LabelLegit
+	LabelFraud  = groundtruth.LabelFraud
+	LabelReject = groundtruth.LabelReject
 )
 
 // Channel is how the card was used.

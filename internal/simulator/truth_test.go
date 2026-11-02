@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/renan-lab/fraud-analysis-go/internal/groundtruth"
 )
 
 func TestTruthWriterWritesOneRecordPerOutcome(t *testing.T) {
@@ -19,7 +21,7 @@ func TestTruthWriterWritesOneRecordPerOutcome(t *testing.T) {
 		t.Fatalf("Err() = %v, want nil", err)
 	}
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	var first, second truthRecord
+	var first, second groundtruth.Record
 	if len(lines) != 2 || json.Unmarshal([]byte(lines[0]), &first) != nil || json.Unmarshal([]byte(lines[1]), &second) != nil {
 		t.Fatalf("output %q, want 2 JSON lines", buf.String())
 	}
