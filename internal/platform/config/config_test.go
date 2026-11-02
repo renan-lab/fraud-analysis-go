@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -42,6 +43,45 @@ func TestLoadIngestSettings(t *testing.T) {
 	}
 	if cfg.IngestRateLimitBurst != 100 {
 		t.Errorf("IngestRateLimitBurst = %d for invalid value, want default 100", cfg.IngestRateLimitBurst)
+	}
+}
+
+func TestLoadWorkerAndAnalysisSettings(t *testing.T) {
+	t.Setenv("WORKER_CONSUMER_GROUP", "")
+	t.Setenv("ANALYSIS_VELOCITY_WINDOW", "90s")
+	t.Setenv("ANALYSIS_CARD_TESTING_SMALL_AMOUNT", "500")
+	t.Setenv("ANALYSIS_OUTLIER_RATIO", "7.5")
+	t.Setenv("ANALYSIS_RISKY_MCCS", " 7995 ,,6051,4829 ")
+	cfg := Load()
+	if cfg.WorkerConsumerGroup != "analysis" {
+		t.Errorf("WorkerConsumerGroup = %q, want default analysis", cfg.WorkerConsumerGroup)
+	}
+	a := cfg.Analysis
+	if a.VelocityWindow != 90*time.Second || a.CardTestingSmallAmount != 500 || a.OutlierRatio != 7.5 {
+		t.Errorf("Analysis = window %v small %d ratio %v, want 90s/500/7.5", a.VelocityWindow, a.CardTestingSmallAmount, a.OutlierRatio)
+	}
+	if a.ReviewThreshold != 50 || a.BlockThreshold != 80 {
+		t.Errorf("thresholds = %d/%d, want defaults 50/80", a.ReviewThreshold, a.BlockThreshold)
+	}
+	if got := strings.Join(a.RiskyMCCs, ","); got != "7995,6051,4829" {
+		t.Errorf("RiskyMCCs = %q, want 7995,6051,4829", got)
+	}
+}
+
+func TestGetList(t *testing.T) {
+	tests := []struct {
+		env  string
+		want string
+	}{
+		{env: "", want: "a,b"},
+		{env: "x", want: "x"},
+		{env: " x , ,y ", want: "x,y"},
+	}
+	for _, tt := range tests {
+		t.Setenv("CONFIG_TEST_LIST", tt.env)
+		if got := strings.Join(getList("CONFIG_TEST_LIST", "a,b"), ","); got != tt.want {
+			t.Errorf("getList with %q = %q, want %q", tt.env, got, tt.want)
+		}
 	}
 }
 
