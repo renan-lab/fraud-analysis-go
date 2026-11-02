@@ -19,6 +19,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  worker:
+    build: .
+    entrypoint: ["/worker"]
+    env_file: .env
+    environment:
+      REDIS_ADDR: redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     environment:

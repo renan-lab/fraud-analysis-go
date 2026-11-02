@@ -3,16 +3,19 @@ export
 
 BINARY := bin/api
 
-.PHONY: help env run build test fmt vet tidy up infra down logs ps clean
+.PHONY: help env run run-worker build test fmt vet tidy up infra down logs ps clean
 
 help: ## List available targets
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-8s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-11s %s\n", $$1, $$2}'
 
 env: ## Create .env from .env.example
 	@test -f .env || cp .env.example .env
 
 run: ## Run the API locally
 	go run ./cmd/api
+
+run-worker: ## Run the analysis worker locally
+	go run ./cmd/worker
 
 build: ## Build the API binary
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/api
@@ -29,7 +32,7 @@ vet: ## Run go vet
 tidy: ## Tidy go.mod
 	go mod tidy
 
-up: env ## Start the full stack (app + infra)
+up: env ## Start the full stack (api + worker + infra)
 	docker compose up -d --build
 
 infra: env ## Start only infrastructure (postgres, redis, kafka)
