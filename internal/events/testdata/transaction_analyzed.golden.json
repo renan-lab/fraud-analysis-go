@@ -1,0 +1,22 @@
+{
+  "event_id": "3d2c1b0a-9f8e-4d7c-8b6a-5f4e3d2c1b0a",
+  "event_type": "transaction.analyzed",
+  "schema_version": 1,
+  "analyzed_at": "2026-11-02T19:15:02Z",
+  "request_id": "5f1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b",
+  "transaction_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "account_id": "acc_3f9a1c2b7d4e",
+  "card_id": "card_9b2c4d6e8f10",
+  "amount": 12990,
+  "currency": "BRL",
+  "occurred_at": "2026-11-02T19:15:00Z",
+  "decision": "review",
+  "score": 60,
+  "rule_results": [
+    {
+      "rule": "amount_outlier",
+      "score": 60,
+      "reason": "amount 12990 is 18.2x the account median 713 (limit 10.0x)"
+    }
+  ]
+}
