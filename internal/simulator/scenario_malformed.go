@@ -29,6 +29,7 @@ func malformedScenarios(pop *Population) []Scenario {
 		mutationSpec(pop, ModeMalformed, "malformed/invalid_transaction_id", "transaction_id is not a UUID; expects 400", http.StatusBadRequest, setField("transaction_id", `"tx-123"`)),
 		mutationSpec(pop, ModeMalformed, "malformed/invalid_channel", "channel outside the allowed enum; expects 400", http.StatusBadRequest, setField("channel", `"telepathy"`)),
 		mutationSpec(pop, ModeMalformed, "malformed/null_merchant", "merchant is null; expects 400", http.StatusBadRequest, setField("merchant", `null`)),
+		mutationSpec(pop, ModeMalformed, "malformed/invalid_location", "location lat outside [-90, 90] or lon outside [-180, 180]; expects 400", http.StatusBadRequest, outOfRangeLocation),
 	}
 }
 
@@ -91,6 +92,11 @@ func setField(key, rawJSON string) fieldMutation {
 
 func removeRandomField(r *rand.Rand, fields map[string]json.RawMessage) {
 	delete(fields, requiredFields[r.IntN(len(requiredFields))])
+}
+
+func outOfRangeLocation(r *rand.Rand, fields map[string]json.RawMessage) {
+	locations := []string{`{"lat":91,"lon":-46.6333}`, `{"lat":-23.5505,"lon":-181}`}
+	fields["location"] = json.RawMessage(locations[r.IntN(len(locations))])
 }
 
 func nonPositiveAmount(r *rand.Rand, fields map[string]json.RawMessage) {

@@ -36,6 +36,12 @@ func TestCardTestingEndsWithLargeChargeFromNewDevice(t *testing.T) {
 		if slices.Contains(c.devices, big.DeviceID) {
 			t.Fatalf("card testing device %q is one of the customer's %v, want a new one", big.DeviceID, c.devices)
 		}
+		origin, _ := countryByCode(big.Merchant.Country)
+		for _, lt := range seq {
+			if l := lt.tx.Location; l != nil && !nearCountry(*l, origin) {
+				t.Fatalf("card testing device location %+v, want near fraud origin %s", *l, origin.code)
+			}
+		}
 		for _, lt := range seq[:len(seq)-1] {
 			if lt.tx.Amount > 500 || lt.tx.Amount >= big.Amount || lt.tx.DeviceID != big.DeviceID {
 				t.Fatalf("probe amount %d device %q, want <= 500, < final %d and device %q", lt.tx.Amount, lt.tx.DeviceID, big.Amount, big.DeviceID)
@@ -55,6 +61,13 @@ func TestImpossibleTravelExceedsAirlinerSpeed(t *testing.T) {
 		hours := seq[1].tx.OccurredAt.Sub(seq[0].tx.OccurredAt).Hours()
 		if speed := distanceKM(home, dest) / hours; speed < 1000 {
 			t.Fatalf("impossible travel %s->%s at %.0f km/h, want >= 1000", home.code, dest.code, speed)
+		}
+		a, b := seq[0].tx.Location, seq[1].tx.Location
+		if a == nil || b == nil {
+			t.Fatalf("impossible travel locations = %+v, %+v, want both set", a, b)
+		}
+		if km := haversineKM(a.Lat, a.Lon, b.Lat, b.Lon); km < impossibleTravelMinKM-100 {
+			t.Fatalf("impossible travel locations %.0f km apart, want about >= %d", km, impossibleTravelMinKM)
 		}
 		if seq[0].label != LabelLegit || seq[1].label != LabelFraud {
 			t.Fatalf("labels = %q, %q, want legit then fraud", seq[0].label, seq[1].label)
@@ -90,6 +103,8 @@ func TestForeignNewDeviceComesFromFraudOrigin(t *testing.T) {
 			t.Fatalf("device %q is known to the customer, want a new one", tx.DeviceID)
 		case !strings.HasPrefix(tx.IP, origin.ipPrefix):
 			t.Fatalf("ip %q, want prefix %q of %s", tx.IP, origin.ipPrefix, origin.code)
+		case tx.Location != nil && !nearCountry(*tx.Location, origin):
+			t.Fatalf("device location %+v, want near %s", *tx.Location, origin.code)
 		}
 	}
 }

@@ -20,7 +20,10 @@ type customer struct {
 	activeFrom, activeTo int
 	devices              []string
 	ip                   string
-	merchants            []Merchant
+	// deviceCountry is where the customer's devices are; fraud scenarios move
+	// it abroad together with a new device, without touching home or currency.
+	deviceCountry country
+	merchants     []Merchant
 }
 
 // Population is the set of simulated customers and the merchants they can buy from.
@@ -74,16 +77,17 @@ func (p *Population) newCustomer(r *rand.Rand) customer {
 	home := pickHomeCountry(r)
 	from := 6 + r.IntN(6)
 	return customer{
-		accountID:   newID(r, "acc"),
-		cardID:      newID(r, "card"),
-		home:        home,
-		spendMedian: home.typicalSpend * math.Exp(0.5*r.NormFloat64()),
-		spendSigma:  0.4 + 0.4*r.Float64(),
-		activeFrom:  from,
-		activeTo:    min(from+10+r.IntN(6), 23),
-		devices:     newDevices(r, 1+r.IntN(3)),
-		ip:          newIP(r, home),
-		merchants:   p.habitualMerchants(r, home.code, 5+r.IntN(8)),
+		accountID:     newID(r, "acc"),
+		cardID:        newID(r, "card"),
+		home:          home,
+		spendMedian:   home.typicalSpend * math.Exp(0.5*r.NormFloat64()),
+		spendSigma:    0.4 + 0.4*r.Float64(),
+		activeFrom:    from,
+		activeTo:      min(from+10+r.IntN(6), 23),
+		devices:       newDevices(r, 1+r.IntN(3)),
+		ip:            newIP(r, home),
+		deviceCountry: home,
+		merchants:     p.habitualMerchants(r, home.code, 5+r.IntN(8)),
 	}
 }
 

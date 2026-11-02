@@ -54,6 +54,12 @@ type Merchant struct {
 	Country string `json:"country"`
 }
 
+// Location is the optional location block of the ingestion contract.
+type Location struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
 // Transaction is the POST /transactions payload documented in ARCHITECTURE.md.
 type Transaction struct {
 	TransactionID string    `json:"transaction_id"`
@@ -66,6 +72,7 @@ type Transaction struct {
 	DeviceID      string    `json:"device_id"`
 	IP            string    `json:"ip"`
 	OccurredAt    time.Time `json:"occurred_at"`
+	Location      *Location `json:"location,omitempty"`
 }
 
 // Emission is one HTTP request the simulator will send, plus what it expects back.

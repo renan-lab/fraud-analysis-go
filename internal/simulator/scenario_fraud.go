@@ -77,6 +77,7 @@ func (p *Population) cardTesting(r *rand.Rand, now time.Time) []labeledTx {
 	c := p.randomCustomer(r)
 	origin := fraudOrigins[r.IntN(len(fraudOrigins))]
 	c.devices = newDevices(r, 1)
+	c.deviceCountry, _ = countryByCode(origin)
 	times := backwardTimes(r, now, 6+r.IntN(6), secondsBetween(3, 20))
 	seq := make([]labeledTx, len(times))
 	for i, at := range times[:len(times)-1] {
@@ -91,7 +92,9 @@ func (p *Population) cardTesting(r *rand.Rand, now time.Time) []labeledTx {
 
 func (p *Population) impossibleTravel(r *rand.Rand, now time.Time) []labeledTx {
 	c := p.randomCustomer(r)
-	first := p.legitPurchase(r, c, now.Add(-time.Duration(10+r.IntN(31))*time.Minute))
+	// The first purchase is in person so both legs carry a terminal location.
+	local := p.merchantWithMCC(r, c.home.code, mccGrocery)
+	first := newTransaction(r, c, local, sampleAmount(r, c.spendMedian, c.spendSigma), ChannelCardPresent, now.Add(-time.Duration(10+r.IntN(31))*time.Minute))
 	far := countriesFartherThan(c.home, impossibleTravelMinKM)
 	dest := far[r.IntN(len(far))]
 	m := p.merchantWithMCC(r, dest.code, mccGrocery)
@@ -115,6 +118,7 @@ func (p *Population) foreignNewDevice(r *rand.Rand, now time.Time) []labeledTx {
 	m := p.merchantWithMCC(r, originCode, risky[r.IntN(len(risky))])
 	c.devices = newDevices(r, 1)
 	c.ip = newIP(r, origin)
+	c.deviceCountry = origin
 	amount := sampleAmount(r, c.spendMedian*3, c.spendSigma)
 	return []labeledTx{{tx: newTransaction(r, c, m, amount, ChannelEcommerce, now), label: LabelFraud}}
 }

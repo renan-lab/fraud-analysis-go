@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"math"
+	"math/rand/v2"
 	"slices"
 )
 
@@ -76,14 +77,30 @@ func categoryByMCC(mcc string) (category, bool) {
 	return categories[i], true
 }
 
-// distanceKM is the great-circle (haversine) distance between two countries' reference cities.
+// distanceKM is the great-circle distance between two countries' reference cities.
 func distanceKM(a, b country) float64 {
+	return haversineKM(a.lat, a.lon, b.lat, b.lon)
+}
+
+// haversineKM is the great-circle distance between two points in decimal degrees.
+func haversineKM(aLat, aLon, bLat, bLon float64) float64 {
 	const earthRadiusKM = 6371.0
 	rad := func(deg float64) float64 { return deg * math.Pi / 180 }
-	dLat := rad(b.lat - a.lat)
-	dLon := rad(b.lon - a.lon)
-	h := math.Pow(math.Sin(dLat/2), 2) + math.Cos(rad(a.lat))*math.Cos(rad(b.lat))*math.Pow(math.Sin(dLon/2), 2)
+	dLat := rad(bLat - aLat)
+	dLon := rad(bLon - aLon)
+	h := math.Pow(math.Sin(dLat/2), 2) + math.Cos(rad(aLat))*math.Cos(rad(bLat))*math.Pow(math.Sin(dLon/2), 2)
 	return 2 * earthRadiusKM * math.Asin(math.Sqrt(h))
+}
+
+// maxJitterDegrees spreads locations around a country's reference city (about 30 km).
+const maxJitterDegrees = 0.25
+
+// nearbyLocation returns a point near the country's reference city, rounded
+// to 4 decimals (about 11 m) like a typical device or terminal fix.
+func nearbyLocation(r *rand.Rand, c country) *Location {
+	jitter := func() float64 { return (2*r.Float64() - 1) * maxJitterDegrees }
+	round := func(deg float64) float64 { return math.Round(deg*1e4) / 1e4 }
+	return &Location{Lat: round(c.lat + jitter()), Lon: round(c.lon + jitter())}
 }
 
 // countriesFartherThan returns countries at least minKM away from home, or the farthest one.

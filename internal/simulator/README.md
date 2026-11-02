@@ -16,7 +16,7 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 
 ## Key files
 
-- `catalog.go`, `population.go`: countries, merchant categories and customers with stable habits (home country, spend, local hours, devices, usual merchants).
+- `catalog.go`, `population.go`: countries (with reference-city coordinates), merchant categories and customers with stable habits (home country, spend, local hours, devices, usual merchants).
 - `scenario.go`: `Scenario` interface and `Catalog()`. One file per mode: `scenario_legit.go`, `scenario_fraud.go`, `scenario_malformed.go`, `scenario_attack.go`, `scenario_duplicate.go`, `scenario_timing.go`.
 - `model.go`: `Transaction` (contract payload) and `Emission` (raw body, expected status, label, copies).
 - `mix.go`: `--mix` parsing and `Generator`.
@@ -30,6 +30,7 @@ Generates realistic and adversarial card transactions to exercise the ingestion 
 - `--time-scale > 1` starts simulated time `--lookback` in the past and never passes wall time. `timing/future` and `timing/within_skew` shift from wall time, because the API checks skew against its own clock.
 - `429` (rate limit) and `503` (Kafka not acknowledging) depend on load and broker health, not on the payload, so no scenario expects them and `contractStatus` ignores them. They show up as expectation violations: run load tests with `INGEST_RATE_LIMIT_RPS=0` (the default) or a limit above `--rate`.
 - Duplicates expect `202` (dedupe happens in consumers). `concurrent_retry` sends `Copies` identical requests, so the report's `sent` counts requests, not scenarios.
+- `location` follows the contract meaning: in-person channels use the merchant country's reference city, `ecommerce` uses `customer.deviceCountry` and omits the block in 30% of purchases. Points get up to 0.25 degrees of seeded jitter (about 30 km), rounded to 4 decimals. Fraud scenarios with a new foreign device (`card_testing`, `foreign_new_device`) move `deviceCountry` to the fraud origin; `impossible_travel` makes both legs card present so both carry coordinates.
 - Dry-run sends have status 0: latency and expectation checks are skipped.
 - Sends use `context.WithoutCancel`: Ctrl+C stops new emissions but lets in-flight requests finish before the report prints.
 

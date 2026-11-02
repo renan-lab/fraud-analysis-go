@@ -3,6 +3,7 @@ package simulator
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"net/netip"
@@ -94,8 +95,19 @@ func satisfiesRules(tx Transaction, now time.Time) bool {
 		slices.Contains(channels, tx.Channel),
 		ipErr == nil,
 		!tx.OccurredAt.IsZero() && !tx.OccurredAt.After(now.Add(5*time.Minute)),
+		validLocation(tx.Location),
 	}
 	return !slices.Contains(checks, false)
+}
+
+// nearCountry reports whether l is within the jitter box around c's reference city.
+func nearCountry(l Location, c country) bool {
+	const box = maxJitterDegrees + 1e-4
+	return math.Abs(l.Lat-c.lat) <= box && math.Abs(l.Lon-c.lon) <= box
+}
+
+func validLocation(l *Location) bool {
+	return l == nil || (l.Lat >= -90 && l.Lat <= 90 && l.Lon >= -180 && l.Lon <= 180)
 }
 
 func validMerchantName(name string) bool {

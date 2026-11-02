@@ -7,6 +7,10 @@ import (
 
 const habitualMerchantChance = 0.9
 
+// ecommerceLocationChance is the share of online purchases whose device shares
+// its location; the rest omit the optional block (no permission, no GPS).
+const ecommerceLocationChance = 0.7
+
 func legitScenarios(pop *Population) []Scenario {
 	return []Scenario{
 		scenarioSpec{
@@ -45,5 +49,22 @@ func newTransaction(r *rand.Rand, c customer, m Merchant, amount int64, channel 
 		DeviceID:      c.devices[r.IntN(len(c.devices))],
 		IP:            c.ip,
 		OccurredAt:    at.UTC().Truncate(time.Millisecond),
+		Location:      purchaseLocation(r, c, m, channel),
 	}
+}
+
+// purchaseLocation is the terminal (merchant) location for in-person channels
+// and the device location for ecommerce, sometimes omitted.
+func purchaseLocation(r *rand.Rand, c customer, m Merchant, channel Channel) *Location {
+	if channel == ChannelEcommerce {
+		if r.Float64() >= ecommerceLocationChance {
+			return nil
+		}
+		return nearbyLocation(r, c.deviceCountry)
+	}
+	where, ok := countryByCode(m.Country)
+	if !ok {
+		return nil
+	}
+	return nearbyLocation(r, where)
 }
