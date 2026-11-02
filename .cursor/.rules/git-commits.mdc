@@ -1,0 +1,15 @@
+---
+description: Git commit message conventions - Conventional Commits, written in English
+alwaysApply: false
+---
+# Git Commit Messages
+
+When generating Git commit messages:
+
+- Use Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `build:`, `ci:`, etc.). Ref: https://www.conventionalcommits.org/en/v1.0.0/
+- Use an optional scope matching the Go package or area changed, e.g. `feat(config):`, `build(docker):`.
+- Write the commit message in English.
+- Keep the first line/title under 60 characters, imperative mood, lowercase, no trailing period.
+- Do not add an overly verbose body unless the change is complex.
+
+Example: `feat(api): add health check endpoint`

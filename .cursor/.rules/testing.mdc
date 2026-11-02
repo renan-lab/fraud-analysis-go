@@ -1,0 +1,15 @@
+---
+description: Go testing conventions for this project - testing package, table-driven tests, fakes and race detector
+alwaysApply: true
+---
+
+# Testing
+
+- Run tests with: `go test -race ./...` (`make test`). Use `go test -run TestName ./path/...` to run a single test.
+- Every new function gets a test. Bug fixes get a regression test.
+- Use the standard `testing` package. Tests live next to the code in `*_test.go` files.
+- Prefer table-driven tests with `t.Run` subtests; call `t.Parallel()` when the test has no shared state.
+- Mock external I/O (API, DB, Kafka, Redis, filesystem) with named fake structs implementing small interfaces, not inline stubs. Use `net/http/httptest` for HTTP handlers and servers.
+- Use `t.Helper()` in test helpers, `t.Cleanup()` for teardown, `t.TempDir()` for files and `t.Setenv()` for env vars.
+- Failure messages must show input, got and want: `t.Errorf("Parse(%q) = %v, want %v", in, got, want)`.
+- Tests must be F.I.R.S.T.: fast, independent, repeatable, self-validating, timely.

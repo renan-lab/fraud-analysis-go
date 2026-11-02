@@ -1,0 +1,39 @@
+---
+description: Go coding standards - style, comments, package structure, error handling, formatting, static analysis and logging
+alwaysApply: true
+---
+
+# Coding Standards
+
+## Code style
+
+- Functions: 4–20 lines. Split if longer.
+- Files: under 500 lines. Split by responsibility.
+- One thing per function, one responsibility per module (SRP).
+- Names: specific and unique. Avoid `data`, `handler`, `Manager`. Prefer names that return <5 grep hits in the codebase.
+- Types: explicit. No `any`, no `Dict`, no untyped functions.
+- No code duplication. Extract shared logic into a function/module.
+- Early returns over nested ifs. Max 2 levels of indentation.
+- Exception messages must include the offending value and expected shape.
+
+## Comments
+
+- Keep your own comments. Don't strip them on refactor — they carry intent and provenance.
+- Write WHY, not WHAT. Skip `// increment counter` above `i++`.
+- Docstrings on public functions: intent + one usage example.
+- Reference issue numbers / commit SHAs when a line exists because of a specific bug or upstream constraint.
+
+## Dependencies & structure
+
+- Inject dependencies through constructor/parameter, not global/import.
+- Wrap third-party libs behind a thin project-owned interface.
+- Follow Go project layout conventions: entrypoints in `cmd/<app>/main.go`, private packages in `internal/`. Prefer small focused packages over god packages; name packages by what they provide (short, lowercase, no `util`/`common`/`helpers`).
+- Accept interfaces, return concrete types. Define interfaces in the consuming package, keep them small.
+- Pass `context.Context` as the first parameter of any function doing I/O; never store it in a struct.
+
+## Formatting, static analysis & logging
+
+- Use the project formatter (`gofmt -s`, via `make fmt`). Don't debate style beyond that.
+- After changing Go code, run `go vet ./...` (`make vet`) and `go test -race ./...` (`make test`), and fix reported errors before considering the work done.
+- Errors: return them, don't panic. Wrap with context using `fmt.Errorf("...: %w", err)`; compare with `errors.Is` / `errors.As`.
+- Structured JSON logs via `log/slog` for debug/observability; plain text only for user-facing CLI output.
