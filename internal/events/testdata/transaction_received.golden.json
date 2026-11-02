@@ -1,0 +1,24 @@
+{
+  "event_id": "0b6f3c1e-2d4a-4f5b-8c7d-9e0f1a2b3c4d",
+  "event_type": "transaction.received",
+  "schema_version": 1,
+  "received_at": "2026-11-02T19:15:01Z",
+  "request_id": "5f1d2c3b-4a59-4687-9a1b-2c3d4e5f6a7b",
+  "transaction": {
+    "transaction_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "account_id": "acc_3f9a1c2b7d4e",
+    "card_id": "card_9b2c4d6e8f10",
+    "amount": 12990,
+    "currency": "BRL",
+    "merchant": {
+      "id": "mer_51a2b3c4d5e6",
+      "name": "Grocery 5e6f",
+      "mcc": "5411",
+      "country": "BR"
+    },
+    "channel": "card_present",
+    "device_id": "dev_0a1b2c3d4e5f",
+    "ip": "177.34.10.200",
+    "occurred_at": "2026-11-02T19:15:00Z"
+  }
+}
