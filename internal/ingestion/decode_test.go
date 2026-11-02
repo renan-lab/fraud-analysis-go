@@ -33,6 +33,18 @@ func TestDecodeTransactionStreamingBodyLimit(t *testing.T) {
 	}
 }
 
+func TestDecodeTransactionRejectsCoordinateAsString(t *testing.T) {
+	t.Parallel()
+	body := `{"location":{"lat":"-23.55","lon":-46.63}}`
+	req := httptest.NewRequest(http.MethodPost, "/transactions", strings.NewReader(body))
+	req.Header.Set("Content-Type", contentTypeJSON)
+	_, err := decodeTransaction(httptest.NewRecorder(), req)
+	var malformed *malformedBodyError
+	if !errors.As(err, &malformed) || malformed.Field != "location.lat" || !strings.Contains(malformed.Detail, "a number") {
+		t.Fatalf("decodeTransaction(%s) error = %v, want malformed body on location.lat asking for a number", body, err)
+	}
+}
+
 func TestIsJSON(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

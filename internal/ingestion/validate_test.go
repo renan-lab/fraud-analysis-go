@@ -2,6 +2,8 @@ package ingestion
 
 import (
 	"encoding/json"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,9 +28,54 @@ func TestToTransactionAcceptsContractExample(t *testing.T) {
 		TransactionID: "7c9e6679-7425-40de-944b-e07fc1f90ae7", AccountID: "acc_3f9a1c2b7d4e", CardID: "card_9b2c4d6e8f10",
 		Amount: 12990, Currency: "BRL", Merchant: Merchant{ID: "mer_51a2b3c4d5e6", Name: "Grocery 5e6f", MCC: "5411", Country: "BR"},
 		Channel: ChannelCardPresent, DeviceID: "dev_0a1b2c3d4e5f", IP: "177.34.10.200", OccurredAt: testNow.Add(-5 * time.Minute),
+		Location: &Location{Lat: -23.5505, Lon: -46.6333},
 	}
-	if tx != want {
+	if !reflect.DeepEqual(tx, want) {
 		t.Fatalf("toTransaction(valid) = %+v, want %+v", tx, want)
+	}
+}
+
+func TestToTransactionLocationRules(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		value  any
+		fields []string
+	}{
+		{"null", nil, nil},
+		{"min bounds", map[string]any{"lat": -90, "lon": -180}, nil},
+		{"max bounds", map[string]any{"lat": 90, "lon": 180}, nil},
+		{"null island", map[string]any{"lat": 0, "lon": 0}, nil},
+		{"lat too high", map[string]any{"lat": 90.0001, "lon": 0}, []string{"location.lat"}},
+		{"lon too low", map[string]any{"lat": 0, "lon": -180.5}, []string{"location.lon"}},
+		{"missing lon", map[string]any{"lat": -23.55}, []string{"location.lon"}},
+		{"empty object", map[string]any{}, []string{"location.lat", "location.lon"}},
+		{"both out of range", map[string]any{"lat": -91, "lon": 181}, []string{"location.lat", "location.lon"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := validPayload()
+			p["location"] = tt.value
+			_, errs := decodeRequest(t, p).toTransaction(testNow)
+			var got []string
+			for _, e := range errs {
+				got = append(got, e.Field)
+			}
+			if !slices.Equal(got, tt.fields) {
+				t.Fatalf("location=%v: error fields = %v (%+v), want %v", tt.value, got, errs, tt.fields)
+			}
+		})
+	}
+}
+
+func TestToTransactionWithoutLocation(t *testing.T) {
+	t.Parallel()
+	p := validPayload()
+	delete(p, "location")
+	tx, errs := decodeRequest(t, p).toTransaction(testNow)
+	if len(errs) > 0 || tx.Location != nil {
+		t.Fatalf("toTransaction(no location) = location %+v errors %+v, want nil location and no errors", tx.Location, errs)
 	}
 }
 

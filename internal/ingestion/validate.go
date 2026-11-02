@@ -96,6 +96,29 @@ func (fv *fieldValidator) merchant(m *merchantRequest) Merchant {
 	}
 }
 
+// location returns nil when the optional block is absent or null; once sent,
+// both coordinates are required.
+func (fv *fieldValidator) location(l *locationRequest) *Location {
+	if l == nil {
+		return nil
+	}
+	return &Location{
+		Lat: fv.coordinate("location.lat", l.Lat, 90),
+		Lon: fv.coordinate("location.lon", l.Lon, 180),
+	}
+}
+
+func (fv *fieldValidator) coordinate(field string, v *float64, limit float64) float64 {
+	if v == nil {
+		fv.fail(field, "is required when location is sent")
+		return 0
+	}
+	if *v < -limit || *v > limit {
+		fv.fail(field, "%g must be between %g and %g decimal degrees", *v, -limit, limit)
+	}
+	return *v
+}
+
 // toTransaction applies every rule of the contract in ARCHITECTURE.md.
 func (req transactionRequest) toTransaction(now time.Time) (Transaction, []FieldError) {
 	var fv fieldValidator
@@ -110,6 +133,7 @@ func (req transactionRequest) toTransaction(now time.Time) (Transaction, []Field
 		DeviceID:      fv.str("device_id", req.DeviceID, idRule),
 		IP:            fv.str("ip", req.IP, ipLiteral),
 		OccurredAt:    fv.occurredAt(req.OccurredAt, now),
+		Location:      fv.location(req.Location),
 	}
 	return tx, fv.errs
 }

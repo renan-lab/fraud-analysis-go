@@ -23,8 +23,15 @@ type Merchant struct {
 	Country string
 }
 
+// Location is where the purchase happened: the terminal for in-person
+// channels, the device for ecommerce. Coordinates are WGS 84 decimal degrees.
+type Location struct {
+	Lat float64
+	Lon float64
+}
+
 // Transaction is a payload that passed every contract rule. Amount is in
-// minor units of Currency; OccurredAt is UTC.
+// minor units of Currency; OccurredAt is UTC; Location is nil when not sent.
 type Transaction struct {
 	TransactionID string
 	AccountID     string
@@ -36,6 +43,7 @@ type Transaction struct {
 	DeviceID      string
 	IP            string
 	OccurredAt    time.Time
+	Location      *Location
 }
 
 // transactionRequest is the raw JSON body. Pointer fields tell a missing (or
@@ -53,6 +61,7 @@ type transactionRequest struct {
 	DeviceID      *string          `json:"device_id"`
 	IP            *string          `json:"ip"`
 	OccurredAt    *string          `json:"occurred_at"`
+	Location      *locationRequest `json:"location"`
 }
 
 type merchantRequest struct {
@@ -60,6 +69,11 @@ type merchantRequest struct {
 	Name    *string `json:"name"`
 	MCC     *string `json:"mcc"`
 	Country *string `json:"country"`
+}
+
+type locationRequest struct {
+	Lat *float64 `json:"lat"`
+	Lon *float64 `json:"lon"`
 }
 
 // Clock returns the current time; tests inject a fixed one.

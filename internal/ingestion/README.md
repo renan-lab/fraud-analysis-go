@@ -26,6 +26,7 @@ Implements `POST /transactions` ([contract](../../ARCHITECTURE.md#ingestion-http
 
 - Rules mirror the contract table in `ARCHITECTURE.md` and `contractStatus` in `internal/simulator/helpers_test.go`; change all three together.
 - `transactionRequest` uses pointers so a missing field ("is required") differs from a zero value (`amount: 0` -> "must be > 0"). `Amount *int64` makes floats, strings and int64 overflow fail at decode time.
+- `location` is the only optional field: absent or `null` -> `Transaction.Location == nil`, and the event omits it (`omitempty` on a pointer). Once the object is sent, `lat` and `lon` are both required. Coordinates are `*float64`, so a string fails at decode time ("a number in decimal degrees") and out-of-range values fail in `validate.go`. `0,0` is a valid point and accepted.
 - `occurred_at` skew (5 min) is checked against the API clock; any past timestamp is accepted. It is stored in UTC.
 - The body limit is enforced twice: `Content-Length` up front and `http.MaxBytesReader` while streaming (chunked bodies). Trailing data is read through the same limit.
 - Error details echo at most 64 runes of the offending value; problem bodies are JSON-encoded, so hostile input cannot break the response.

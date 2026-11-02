@@ -86,6 +86,7 @@ func validPayload() map[string]any {
 		"device_id":      "dev_0a1b2c3d4e5f",
 		"ip":             "177.34.10.200",
 		"occurred_at":    "2026-11-02T19:10:00Z",
+		"location":       map[string]any{"lat": -23.5505, "lon": -46.6333},
 	}
 }
 

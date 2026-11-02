@@ -86,6 +86,8 @@ func jsonTypeName(e *json.UnmarshalTypeError) string {
 		return "an integer within int64 (minor units)"
 	case "string":
 		return "a string"
+	case "float64":
+		return "a number in decimal degrees"
 	default:
 		return "a JSON object"
 	}

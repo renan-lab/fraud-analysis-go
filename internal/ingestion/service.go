@@ -69,5 +69,13 @@ func toEventTransaction(tx Transaction) events.Transaction {
 		DeviceID:      tx.DeviceID,
 		IP:            tx.IP,
 		OccurredAt:    tx.OccurredAt,
+		Location:      toEventLocation(tx.Location),
 	}
+}
+
+func toEventLocation(l *Location) *events.Location {
+	if l == nil {
+		return nil
+	}
+	return &events.Location{Lat: l.Lat, Lon: l.Lon}
 }

@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/renan-lab/fraud-analysis-go/internal/events"
 )
 
 func TestHandlerAcceptsValidTransaction(t *testing.T) {
@@ -22,6 +25,33 @@ func TestHandlerAcceptsValidTransaction(t *testing.T) {
 	evs := pub.published()
 	if len(evs) != 1 || evs[0].RequestID == "" || evs[0].RequestID != rec.Header().Get("X-Request-ID") {
 		t.Fatalf("published %+v, want 1 event carrying request id %q", evs, rec.Header().Get("X-Request-ID"))
+	}
+}
+
+func TestHandlerPublishesLocation(t *testing.T) {
+	t.Parallel()
+	withoutLocation := validPayload()
+	delete(withoutLocation, "location")
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    *events.Location
+	}{
+		{"sent", validPayload(), &events.Location{Lat: -23.5505, Lon: -46.6333}},
+		{"absent", withoutLocation, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pub := &fakePublisher{}
+			if rec := postTransaction(t, newTestHandler(pub), "application/json", mustJSON(t, tt.payload)); rec.Code != http.StatusAccepted {
+				t.Fatalf("status = %d body %s, want 202", rec.Code, rec.Body)
+			}
+			evs := pub.published()
+			if len(evs) != 1 || !reflect.DeepEqual(evs[0].Transaction.Location, tt.want) {
+				t.Fatalf("published %+v, want 1 event with location %+v", evs, tt.want)
+			}
+		})
 	}
 }
 
@@ -69,6 +99,9 @@ func TestHandlerRejects(t *testing.T) {
 		{"deep nesting", "application/json", withField("merchant", strings.Repeat(`{"x":`, 5000)+"1"+strings.Repeat("}", 5000)), 400, "/problems/malformed-body"},
 		{"null merchant", "application/json", withField("merchant", `null`), 400, "/problems/validation"},
 		{"invalid currency", "application/json", withField("currency", `"REAL"`), 400, "/problems/validation"},
+		{"location out of range", "application/json", withField("location", `{"lat":91,"lon":0}`), 400, "/problems/validation"},
+		{"location as string", "application/json", withField("location", `"-23.55,-46.63"`), 400, "/problems/malformed-body"},
+		{"location extra field", "application/json", withField("location", `{"lat":0,"lon":0,"alt":10}`), 400, "/problems/malformed-body"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
