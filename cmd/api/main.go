@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/renan-lab/fraud-analysis-go/internal/config"
+	"github.com/renan-lab/fraud-analysis-go/internal/platform/config"
 )
 
 func main() {
