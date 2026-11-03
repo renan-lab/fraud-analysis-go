@@ -50,6 +50,47 @@ func TestCardTestingEndsWithLargeChargeFromNewDevice(t *testing.T) {
 	}
 }
 
+func TestCardTestingFiresProbesInParallelThenCashout(t *testing.T) {
+	t.Parallel()
+	pop := newTestPopulation(t, 12, 20)
+	seq := pop.cardTesting(newTestRand(13), testNow)
+	emissions, err := encodeSequence(ModeFraud, "fraud/card_testing", seq)
+	if err != nil {
+		t.Fatalf("encodeSequence: %v", err)
+	}
+	for i, e := range emissions {
+		if wantParallel := i < len(emissions)-1; e.Parallel != wantParallel {
+			t.Fatalf("emission %d of %d Parallel = %v, want %v (probes parallel, cash-out sequential)", i, len(emissions), e.Parallel, wantParallel)
+		}
+	}
+}
+
+func TestClonedCardConcurrentIsSimultaneousAndFar(t *testing.T) {
+	t.Parallel()
+	pop := newTestPopulation(t, 20, 20)
+	r := newTestRand(21)
+	for range 50 {
+		seq := pop.clonedCardConcurrent(r, testNow)
+		home, far := seq[0], seq[1]
+		gap := far.tx.OccurredAt.Sub(home.tx.OccurredAt)
+		a, b := home.tx.Location, far.tx.Location
+		switch {
+		case home.tx.CardID != far.tx.CardID:
+			t.Fatalf("cards %q and %q, want the same card", home.tx.CardID, far.tx.CardID)
+		case gap <= 0 || gap > 3*time.Second:
+			t.Fatalf("far purchase %v after home, want within (0, 3s]", gap)
+		case a == nil || b == nil:
+			t.Fatalf("locations = %+v, %+v, want both set", a, b)
+		case haversineKM(a.Lat, a.Lon, b.Lat, b.Lon) < impossibleTravelMinKM-100:
+			t.Fatalf("locations %.0f km apart, want about >= %d", haversineKM(a.Lat, a.Lon, b.Lat, b.Lon), impossibleTravelMinKM)
+		case !home.parallel || !far.parallel:
+			t.Fatalf("parallel = %v, %v, want both sent at the same time", home.parallel, far.parallel)
+		case home.label != LabelLegit || far.label != LabelFraud:
+			t.Fatalf("labels = %q, %q, want legit then fraud", home.label, far.label)
+		}
+	}
+}
+
 func TestImpossibleTravelExceedsAirlinerSpeed(t *testing.T) {
 	t.Parallel()
 	pop := newTestPopulation(t, 14, 20)

@@ -10,8 +10,9 @@ const impossibleTravelMinKM = 5000
 func fraudScenarios(pop *Population) []Scenario {
 	return []Scenario{
 		fraudSpec("fraud/velocity", "8-15 purchases on the same card within ~3 minutes; expects 202", pop.velocity),
-		fraudSpec("fraud/card_testing", "5-10 tiny online charges abroad from a new device, then a large one; expects 202", pop.cardTesting),
+		fraudSpec("fraud/card_testing", "5-10 tiny online charges abroad from a new device fired in parallel, then a large one; expects 202", pop.cardTesting),
 		fraudSpec("fraud/impossible_travel", "legit purchase at home, then a card-present purchase >5000 km away minutes later; expects 202", pop.impossibleTravel),
+		fraudSpec("fraud/cloned_card_concurrent", "legit purchase at home and a cloned-card purchase >5000 km away seconds apart, sent at the same time; expects 202", pop.clonedCardConcurrent),
 		fraudSpec("fraud/amount_outlier", "electronics purchase 15-40x the customer's median spend; expects 202", pop.amountOutlier),
 		fraudSpec("fraud/foreign_new_device", "online betting/crypto purchase from a fraud-origin country, new device and foreign IP; expects 202", pop.foreignNewDevice),
 	}
@@ -82,9 +83,10 @@ func (p *Population) cardTesting(r *rand.Rand, now time.Time) []labeledTx {
 	c.deviceCountry, _ = countryByCode(origin)
 	times := backwardTimes(r, now, 6+r.IntN(6), secondsBetween(3, 20))
 	seq := make([]labeledTx, len(times))
+	// A bot fires the validation charges in parallel; the cash-out waits for them.
 	for i, at := range times[:len(times)-1] {
 		m := p.merchantWithMCC(r, origin, mccOnlineRetail)
-		seq[i] = labeledTx{tx: newTransaction(r, c, m, int64(100+r.IntN(401)), ChannelEcommerce, at), label: LabelFraud}
+		seq[i] = labeledTx{tx: newTransaction(r, c, m, int64(100+r.IntN(401)), ChannelEcommerce, at), label: LabelFraud, parallel: true}
 	}
 	big := p.merchantWithMCC(r, origin, mccElectronics)
 	amount := int64(c.spendMedian * float64(20+r.IntN(11)))
@@ -97,12 +99,33 @@ func (p *Population) impossibleTravel(r *rand.Rand, now time.Time) []labeledTx {
 	// The first purchase is in person so both legs carry a terminal location.
 	local := p.merchantWithMCC(r, c.home.code, mccGrocery)
 	first := newTransaction(r, c, local, sampleAmount(r, c.spendMedian, c.spendSigma), ChannelCardPresent, now.Add(-time.Duration(10+r.IntN(31))*time.Minute))
+	return []labeledTx{{tx: first, label: LabelLegit}, {tx: p.farPurchase(r, c, now), label: LabelFraud}}
+}
+
+// clonedCardConcurrent is the owner buying at home while a clone of the card
+// is used far away a few seconds later. Both requests travel at the same
+// time, so either may reach the API first. impossible_travel only looks back
+// in time: on a card with no earlier located purchase, the far leg is missed
+// when it lands first.
+func (p *Population) clonedCardConcurrent(r *rand.Rand, now time.Time) []labeledTx {
+	c := p.randomCustomer(r)
+	local := p.merchantWithMCC(r, c.home.code, mccGrocery)
+	home := newTransaction(r, c, local, sampleAmount(r, c.spendMedian, c.spendSigma), ChannelCardPresent, now.Add(-time.Duration(1+r.IntN(3))*time.Second))
+	return []labeledTx{
+		{tx: home, label: LabelLegit, parallel: true},
+		{tx: p.farPurchase(r, c, now), label: LabelFraud, parallel: true},
+	}
+}
+
+// farPurchase is a card-present purchase at least impossibleTravelMinKM from
+// c's home, with an IP from that country.
+func (p *Population) farPurchase(r *rand.Rand, c customer, at time.Time) Transaction {
 	far := countriesFartherThan(c.home, impossibleTravelMinKM)
 	dest := far[r.IntN(len(far))]
 	m := p.merchantWithMCC(r, dest.code, mccGrocery)
-	second := newTransaction(r, c, m, sampleAmount(r, c.spendMedian, c.spendSigma), ChannelCardPresent, now)
-	second.IP = newIP(r, dest)
-	return []labeledTx{{tx: first, label: LabelLegit}, {tx: second, label: LabelFraud}}
+	tx := newTransaction(r, c, m, sampleAmount(r, c.spendMedian, c.spendSigma), ChannelCardPresent, at)
+	tx.IP = newIP(r, dest)
+	return tx
 }
 
 func (p *Population) amountOutlier(r *rand.Rand, now time.Time) []labeledTx {
