@@ -30,8 +30,9 @@ func fraudSpec(name, description string, build func(r *rand.Rand, now time.Time)
 }
 
 type labeledTx struct {
-	tx    Transaction
-	label Label
+	tx       Transaction
+	label    Label
+	parallel bool
 }
 
 func encodeSequence(mode Mode, scenario string, seq []labeledTx) ([]Emission, error) {
@@ -41,6 +42,7 @@ func encodeSequence(mode Mode, scenario string, seq []labeledTx) ([]Emission, er
 		if err != nil {
 			return nil, err
 		}
+		e.Parallel = lt.parallel
 		out = append(out, e)
 	}
 	return out, nil

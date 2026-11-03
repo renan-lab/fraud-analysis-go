@@ -90,6 +90,13 @@ type Emission struct {
 	Body           []byte
 	// Copies > 1 sends the same request that many times concurrently.
 	Copies int
+	// Parallel sends the emission without waiting for the other parallel
+	// emissions of its batch. By default an emission waits until every earlier
+	// emission of its batch (one Scenario.Next) got a response: legs minutes
+	// apart in occurred_at are only a tick apart on the wire, and must not
+	// overtake each other. A parallel emission still waits for the last
+	// sequential emission before it.
+	Parallel bool
 }
 
 func (e Emission) copies() int {

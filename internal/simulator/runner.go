@@ -94,6 +94,8 @@ func (c RunConfig) validate() error {
 }
 
 // Runner paces emissions from a source into a pool of concurrent senders.
+// Legs of one batch keep their causal order unless marked Parallel; different
+// batches run concurrently.
 type Runner struct {
 	cfg       RunConfig
 	source    EmissionSource
@@ -120,7 +122,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		ctx, cancel = context.WithTimeout(ctx, r.cfg.Duration)
 		defer cancel()
 	}
-	jobs := make(chan Emission, r.cfg.Concurrency)
+	jobs := make(chan job, r.cfg.Concurrency)
 	var wg sync.WaitGroup
 	sendCtx := context.WithoutCancel(ctx)
 	for range r.cfg.Concurrency {
@@ -132,16 +134,25 @@ func (r *Runner) Run(ctx context.Context) error {
 	return err
 }
 
-func (r *Runner) work(ctx context.Context, jobs <-chan Emission) {
-	for e := range jobs {
-		res, err := r.sender.Send(ctx, e)
-		for _, o := range r.observers {
-			o.Observe(Outcome{Emission: e, Result: res, Err: err})
-		}
+func (r *Runner) work(ctx context.Context, jobs <-chan job) {
+	for j := range jobs {
+		r.send(ctx, j)
 	}
 }
 
-func (r *Runner) dispatch(ctx context.Context, jobs chan<- Emission) error {
+// send waits for the earlier legs j depends on, then sends it. The signal is
+// finished even when the send fails: a later purchase still happens in the
+// real world after an earlier one was refused.
+func (r *Runner) send(ctx context.Context, j job) {
+	defer j.signal.finish()
+	j.awaitDependencies()
+	res, err := r.sender.Send(ctx, j.emission)
+	for _, o := range r.observers {
+		o.Observe(Outcome{Emission: j.emission, Result: res, Err: err})
+	}
+}
+
+func (r *Runner) dispatch(ctx context.Context, jobs chan<- job) error {
 	queue := &emissionQueue{source: r.source}
 	start := time.Now()
 	burstPending := r.cfg.Burst.Size > 0
@@ -170,14 +181,14 @@ func (r *Runner) dispatch(ctx context.Context, jobs chan<- Emission) error {
 }
 
 // dispatchBatch enqueues up to size emissions without exceeding Count.
-func (r *Runner) dispatchBatch(ctx context.Context, q *emissionQueue, jobs chan<- Emission, size, dispatched int) (int, error) {
+func (r *Runner) dispatchBatch(ctx context.Context, q *emissionQueue, jobs chan<- job, size, dispatched int) (int, error) {
 	n := 0
 	for ; n < size && (r.cfg.Count == 0 || dispatched+n < r.cfg.Count); n++ {
-		e, err := q.pop()
+		j, err := q.pop()
 		if err != nil {
 			return n, err
 		}
-		if !enqueue(ctx, jobs, e) {
+		if !enqueue(ctx, jobs, j) {
 			return n, nil
 		}
 	}
@@ -193,33 +204,16 @@ func (r *Runner) interval(elapsed time.Duration) time.Duration {
 	return time.Duration(float64(time.Second) / (r.cfg.Rate * factor))
 }
 
-// enqueue sends every copy of e to the workers, giving up if ctx is done.
-func enqueue(ctx context.Context, jobs chan<- Emission, e Emission) bool {
-	for range e.copies() {
+// enqueue sends every copy of j to the workers, giving up if ctx is done.
+// After a give-up no later leg of the batch is enqueued, so nobody waits on
+// the signal of a leg whose copies were only partly sent.
+func enqueue(ctx context.Context, jobs chan<- job, j job) bool {
+	for range j.emission.copies() {
 		select {
-		case jobs <- e:
+		case jobs <- j:
 		case <-ctx.Done():
 			return false
 		}
 	}
 	return true
-}
-
-// emissionQueue buffers multi-emission scenarios so they are paced one per tick.
-type emissionQueue struct {
-	source  EmissionSource
-	pending []Emission
-}
-
-func (q *emissionQueue) pop() (Emission, error) {
-	for len(q.pending) == 0 {
-		batch, err := q.source.Next()
-		if err != nil {
-			return Emission{}, fmt.Errorf("generate emissions: %w", err)
-		}
-		q.pending = batch
-	}
-	e := q.pending[0]
-	q.pending = q.pending[1:]
-	return e, nil
 }
