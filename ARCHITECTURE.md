@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-11-02. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/worker` (analysis: consumes `transactions.received`, Redis features, publishes `transactions.analyzed`), `cmd/simulator`, `cmd/evaluator` (scores decisions against simulator ground truth), the modules `ingestion`, `analysis`, `simulator` and `evaluation`, the contract packages `internal/events` and `internal/groundtruth`, and `internal/platform/{config,httpmw,ids,kafka,redis}` exist. `alerts` and Postgres usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
+Last reviewed: 2026-11-03. Part of this document is **planned**. Today `cmd/api` (ingestion: `POST /transactions` publishing to `transactions.received`, plus `/health`, `/ready`, `/metrics`), `cmd/worker` (analysis: consumes `transactions.received`, Redis features, publishes `transactions.analyzed`), `cmd/simulator`, `cmd/evaluator` (scores decisions against simulator ground truth), the modules `ingestion`, `analysis`, `simulator` and `evaluation`, the contract packages `internal/events` and `internal/groundtruth`, and `internal/platform/{config,httpmw,ids,kafka,redis}` exist. `alerts` and Postgres usage are planned. Update this file when a module boundary, binary, topic or data ownership changes.
 
 ## Overview
 
@@ -44,10 +44,10 @@ The ground-truth file (`simulator run --truth`) is NDJSON of `groundtruth.Record
 
 Every event is JSON with a versioned envelope ([ADR 0005](docs/decisions/0005-wrap-kafka-events-in-a-versioned-json-envelope.md)). Golden example: `internal/events/testdata/transaction_received.golden.json`.
 
-- Key: `transaction_id`. Headers: `event_type`, `schema_version`, `request_id`.
+- Key of `transactions.received`: `account_id`, so every transaction of an account lands on one partition and is analyzed by one worker, in order ([ADR 0012](docs/decisions/0012-partition-transactions-by-account-id.md)). Headers: `event_type`, `schema_version`, `request_id`.
 - Value: `event_id` (new UUID per publish), `event_type`, `schema_version`, `received_at` (UTC), `request_id`, and `transaction` with the HTTP contract fields, `occurred_at` normalized to UTC. `transaction.location` is omitted when the client did not send it (never `{"lat":0,"lon":0}`).
 - Duplicates of a `transaction_id` produce distinct events with distinct `event_id`s: dedupe by `transaction.transaction_id`.
-- `transactions.analyzed` uses the same key and headers. Value: `event_id`, `event_type` (`transaction.analyzed`), `schema_version`, `analyzed_at`, `request_id` (copied from the received event), `transaction_id`, `account_id`, `card_id`, `amount`, `currency`, `occurred_at`, `decision` (`approve`/`review`/`block`), `score`, and `rule_results` (`rule`, `score`, `reason` of the rules that fired; `[]` when none). Golden example: `internal/events/testdata/transaction_analyzed.golden.json`. A redelivery publishes a new `event_id` with the same decision: upsert by `transaction_id`.
+- `transactions.analyzed` is keyed by `transaction_id` (its consumers keep no per-account state) and uses the same headers. Value: `event_id`, `event_type` (`transaction.analyzed`), `schema_version`, `analyzed_at`, `request_id` (copied from the received event), `transaction_id`, `account_id`, `card_id`, `amount`, `currency`, `occurred_at`, `decision` (`approve`/`review`/`block`), `score`, and `rule_results` (`rule`, `score`, `reason` of the rules that fired; `[]` when none). Golden example: `internal/events/testdata/transaction_analyzed.golden.json`. A redelivery publishes a new `event_id` with the same decision: upsert by `transaction_id`.
 
 ## Ingestion HTTP contract
 
@@ -177,7 +177,8 @@ Decisions that are expensive to reverse are recorded as ADRs in [docs/decisions/
 ## Invariants
 
 - Kafka delivery is at-least-once. Every consumer MUST be idempotent, keyed by `transaction_id`. Commit offsets only after processing succeeds.
-- `transaction_id` is the Kafka message key and the idempotency key. `alerts` upserts by `transaction_id`.
+- `transaction_id` is the idempotency key, read from the payload. `alerts` upserts by `transaction_id`. The Kafka key is the partition key: `account_id` on `transactions.received`, `transaction_id` on `transactions.analyzed`.
+- One worker analyzes an account at a time: `transactions.received` is partitioned by `account_id`, the consumer blocks rebalances while a batch is in progress, and records of one partition are handled sequentially. Never parallelize within a partition ([ADR 0012](docs/decisions/0012-partition-transactions-by-account-id.md)).
 - Redis state must tolerate redelivery: sorted-set members and hash values contain `transaction_id`, scores are the event timestamp, and reads exclude the transaction being analyzed, so reprocessing neither double counts nor changes the decision ([ADR 0009](docs/decisions/0009-use-go-redis-for-analysis-feature-state.md)). `analysis` owns every key under `analysis:`.
 - Ingestion responds `202 Accepted` only after the event is published to Kafka; publish failure returns `503`. Analysis results are never returned by the ingestion endpoint.
 - Money is `int64` in minor units (cents) plus an ISO 4217 currency code. Never use floats for amounts.

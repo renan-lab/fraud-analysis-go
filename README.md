@@ -89,6 +89,8 @@ make run-worker
 
 Consome `transactions.received`, avalia as regras (`velocity`, `card_testing`, `impossible_travel`, `amount_outlier`, `new_device_foreign`), soma os scores e publica a decisão em `transactions.analyzed`. Limiares, janelas e scores vêm das variáveis `ANALYSIS_*` (veja `.env.example`); o consumer group vem de `WORKER_CONSUMER_GROUP`. Detalhes em [internal/analysis/README.md](internal/analysis/README.md).
 
+Para escalar o worker: `docker compose up -d --scale worker=3` (no máximo `KAFKA_TOPIC_PARTITIONS` réplicas úteis). As transações são particionadas por `account_id`, então cada conta é analisada por um único worker por vez ([ADR 0012](docs/decisions/0012-partition-transactions-by-account-id.md)). Se o tópico tiver eventos antigos publicados com a chave `transaction_id`, rode `make clean` (apaga os volumes do Kafka e do Redis) antes de subir de novo.
+
 Testes:
 
 ```bash

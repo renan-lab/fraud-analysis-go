@@ -25,6 +25,7 @@ Scores every transaction from `transactions.received` and publishes `approve`, `
 ## Invariants and gotchas
 
 - Rules never do I/O or read the clock. A new signal that needs state means extending `Features`, `Load` and `Record`, not querying Redis from the rule.
+- Load -> Record is not atomic in Redis. It is safe only because one worker owns each account at a time: `transactions.received` is keyed by `account_id` and `platform/kafka.Consumer` blocks rebalances while a batch is handled ([ADR 0012](../../docs/decisions/0012-partition-transactions-by-account-id.md)). Handling records of one partition concurrently (a goroutine per record) would let two purchases miss each other again in `velocity`, `card_testing` and `impossible_travel`.
 - Redelivery safety: `Load` skips the current `transaction_id`, `Record` only uses `ZADD` and `HSETNX` with `transaction_id` in the member/value, and the amounts ZSET keeps `BaselineSize + 1` entries. A replay gets the same decision unless another event for the same card/account was recorded in between.
 - Windows use `occurred_at` (event time), not arrival time. `Load` reads card history in `[occurred_at - ANALYSIS_HISTORY_RETENTION, occurred_at]`, so a late event is compared with what happened before it.
 - A device or country is "known" only when the hash stores a different txid. The first transaction of an account always scores new device + new country (45 by default), which stays below review on purpose.

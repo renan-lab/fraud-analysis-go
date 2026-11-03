@@ -1,6 +1,6 @@
 # 0005. Wrap Kafka events in a versioned JSON envelope
 
-- Status: accepted
+- Status: accepted; the key of `transactions.received` is superseded by [0012](0012-partition-transactions-by-account-id.md)
 - Date: 2026-11-02
 
 ## Context

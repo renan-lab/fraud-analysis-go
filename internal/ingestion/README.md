@@ -31,6 +31,7 @@ Implements `POST /transactions` ([contract](../../ARCHITECTURE.md#ingestion-http
 - The body limit is enforced twice: `Content-Length` up front and `http.MaxBytesReader` while streaming (chunked bodies). Trailing data is read through the same limit.
 - Error details echo at most 64 runes of the offending value; problem bodies are JSON-encoded, so hostile input cannot break the response.
 - Duplicates are published again on purpose ([ADR 0002](../../docs/decisions/0002-accept-duplicate-transactions-idempotently.md)). A client disconnect cancels the publish context; the event may or may not land, and a retry is safe.
+- Events are keyed by `account_id`, not `transaction_id`: one account maps to one partition, so a single analysis worker scores its transactions in order ([ADR 0012](../../docs/decisions/0012-partition-transactions-by-account-id.md)). Do not change the key without revisiting that ADR.
 - `Service` never imports `net/http` or Kafka packages; `publisher.go` is the only file touching `platform/kafka`.
 
 ## Configuration
