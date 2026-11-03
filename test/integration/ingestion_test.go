@@ -42,8 +42,8 @@ func TestPostTransactionPublishesEnvelope(t *testing.T) {
 	}
 
 	rec := consumeOne(ctx, t, brokers, topic)
-	if string(rec.Key) != txID {
-		t.Fatalf("record key = %q, want transaction_id %q", rec.Key, txID)
+	if string(rec.Key) != "acc_it" {
+		t.Fatalf("record key = %q, want account_id %q", rec.Key, "acc_it")
 	}
 	assertHeaders(t, rec, resp.Header.Get(httpmw.HeaderRequestID))
 	var ev events.TransactionReceived
@@ -76,11 +76,18 @@ func newProducer(t *testing.T, brokers []string) *kafka.Producer {
 	return producer
 }
 
-// newTestTopic creates a unique topic and deletes it when the test ends.
+// newTestTopic creates a unique single-partition topic and deletes it when the test ends.
 func newTestTopic(ctx context.Context, t *testing.T, brokers []string) string {
 	t.Helper()
+	return newTestTopicWithPartitions(ctx, t, brokers, 1)
+}
+
+// newTestTopicWithPartitions creates a unique topic with n partitions and
+// deletes it when the test ends.
+func newTestTopicWithPartitions(ctx context.Context, t *testing.T, brokers []string, n int) string {
+	t.Helper()
 	topic := "it.transactions.received." + ids.NewV4()
-	if err := newProducer(t, brokers).EnsureTopic(ctx, topic, 1, 1); err != nil {
+	if err := newProducer(t, brokers).EnsureTopic(ctx, topic, n, 1); err != nil {
 		t.Fatalf("EnsureTopic(%s) on %v: %v (is `make infra` up?)", topic, brokers, err)
 	}
 	t.Cleanup(func() { deleteTopic(t, brokers, topic) })

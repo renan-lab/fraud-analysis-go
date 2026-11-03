@@ -28,7 +28,7 @@ func TestAnalysisPipelinePublishesDecision(t *testing.T) {
 
 	ev := newReceivedEvent()
 	publishReceived(ctx, t, producer, inTopic, ev)
-	stopWorker := startAnalysisWorker(ctx, t, brokers, inTopic, analysis.NewKafkaPublisher(producer, outTopic))
+	stopWorker := startAnalysisWorker(ctx, t, brokers, inTopic, "it-"+ids.NewV4(), defaultRules(), analysis.NewKafkaPublisher(producer, outTopic))
 	defer stopWorker()
 
 	rec := consumeOne(ctx, t, brokers, outTopic)
@@ -67,24 +67,26 @@ func publishReceived(ctx context.Context, t *testing.T, producer *kafka.Producer
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	msg := kafka.Message{Topic: topic, Key: []byte(ev.Transaction.TransactionID), Value: value}
+	msg := kafka.Message{Topic: topic, Key: []byte(ev.Transaction.AccountID), Value: value}
 	if err := producer.Publish(ctx, msg); err != nil {
 		t.Fatalf("publish to %s: %v", topic, err)
 	}
 }
 
-// startAnalysisWorker runs the consumer in a goroutine; the returned func stops it and waits.
-func startAnalysisWorker(ctx context.Context, t *testing.T, brokers []string, topic string, pub analysis.AnalyzedPublisher) func() {
+// startAnalysisWorker runs the consumer in a goroutine as a member of group;
+// the returned func stops it and waits. Workers sharing a group split the
+// partitions of topic between them, like scaled cmd/worker replicas.
+func startAnalysisWorker(ctx context.Context, t *testing.T, brokers []string, topic, group string, rules []analysis.Rule, pub analysis.AnalyzedPublisher) func() {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := analysis.NewService(analysis.ServiceDeps{
-		Store: newFeatureStore(ctx, t), Publisher: pub, Rules: defaultRules(),
+		Store: newFeatureStore(ctx, t), Publisher: pub, Rules: rules,
 		Thresholds: analysis.Thresholds{Review: 50, Block: 80}, Clock: analysis.SystemClock{}, NewID: ids.NewV4,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	consumer, err := kafka.NewConsumer(kafka.ConsumerConfig{Brokers: brokers, Group: "it-" + ids.NewV4(), Topics: []string{topic}}, logger)
+	consumer, err := kafka.NewConsumer(kafka.ConsumerConfig{Brokers: brokers, Group: group, Topics: []string{topic}}, logger)
 	if err != nil {
 		t.Fatalf("NewConsumer: %v", err)
 	}
