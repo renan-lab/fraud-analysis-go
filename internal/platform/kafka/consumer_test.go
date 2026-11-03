@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"testing"
@@ -32,6 +33,26 @@ func TestNewConsumerValidatesConfig(t *testing.T) {
 				c.Close()
 			}
 		})
+	}
+}
+
+func TestRunReturnsNilWhenContextIsCancelled(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := ConsumerConfig{Brokers: []string{"127.0.0.1:1"}, Group: "g", Topics: []string{"t"}}
+	c, err := NewConsumer(cfg, logger)
+	if err != nil {
+		t.Fatalf("NewConsumer(%+v): %v", cfg, err)
+	}
+	t.Cleanup(c.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	handle := func(context.Context, Record) error {
+		t.Error("handler called with a cancelled context, want no records")
+		return nil
+	}
+	if err := c.Run(ctx, handle); err != nil {
+		t.Fatalf("Run(cancelled ctx) = %v, want nil", err)
 	}
 }
 

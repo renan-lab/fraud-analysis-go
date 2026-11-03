@@ -14,6 +14,11 @@ import (
 // shutdown, so a message processed during Ctrl+C is still committed.
 const commitTimeout = 5 * time.Second
 
+// pollBatchSize bounds the records handled between two AllowRebalance calls.
+// Rebalances wait for the whole batch, and a member that blocks one past the
+// rebalance timeout (60 s by default) is kicked from the group.
+const pollBatchSize = 100
+
 // Record is one consumed message.
 type Record struct {
 	Topic     string
@@ -30,6 +35,10 @@ type RecordHandler func(ctx context.Context, rec Record) error
 
 // Consumer reads topics as a member of a consumer group and commits offsets
 // manually, one record at a time, only after the handler succeeded.
+// Rebalances are blocked while a polled batch is handled, so a partition never
+// moves to another member mid-record and every commit is for a partition this
+// member still owns: records of one key are never handled by two members at
+// once (ADR 0012).
 type Consumer struct {
 	client *kgo.Client
 	logger *slog.Logger
@@ -54,17 +63,25 @@ func NewConsumer(cfg ConsumerConfig, logger *slog.Logger) (*Consumer, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := kgo.NewClient(
+	client, err := kgo.NewClient(consumerOpts(seeds, cfg, logger)...)
+	if err != nil {
+		return nil, fmt.Errorf("create kafka consumer for group %s: %w", cfg.Group, err)
+	}
+	return &Consumer{client: client, logger: logger}, nil
+}
+
+func consumerOpts(seeds []string, cfg ConsumerConfig, logger *slog.Logger) []kgo.Opt {
+	return []kgo.Opt{
 		kgo.SeedBrokers(seeds...),
 		kgo.ConsumerGroup(cfg.Group),
 		kgo.ConsumeTopics(cfg.Topics...),
 		kgo.DisableAutoCommit(),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create kafka consumer for group %s: %w", cfg.Group, err)
+		kgo.BlockRebalanceOnPoll(),
+		kgo.OnPartitionsCallbackBlocked(func(context.Context, *kgo.Client) {
+			logger.Warn("kafka rebalance waiting for the batch in progress", "group", cfg.Group)
+		}),
 	}
-	return &Consumer{client: client, logger: logger}, nil
 }
 
 func validateConsumerConfig(cfg ConsumerConfig) error {
@@ -84,17 +101,25 @@ func validateConsumerConfig(cfg ConsumerConfig) error {
 //	err := consumer.Run(ctx, func(ctx context.Context, rec kafka.Record) error { return nil })
 func (c *Consumer) Run(ctx context.Context, handle RecordHandler) error {
 	for {
-		fetches := c.client.PollFetches(ctx)
+		fetches := c.client.PollRecords(ctx, pollBatchSize)
 		if ctx.Err() != nil || fetches.IsClientClosed() {
+			c.client.AllowRebalance()
 			return nil
 		}
-		fetches.EachError(func(topic string, partition int32, err error) {
-			c.logger.Warn("kafka fetch error", "topic", topic, "partition", partition, "error", err)
-		})
-		if err := c.handleFetches(ctx, fetches, handle); err != nil {
+		if err := c.handleBatch(ctx, fetches, handle); err != nil {
 			return err
 		}
 	}
+}
+
+// handleBatch always re-allows rebalances, also on error, so Close can leave
+// the group instead of waiting for the rebalance timeout.
+func (c *Consumer) handleBatch(ctx context.Context, fetches kgo.Fetches, handle RecordHandler) error {
+	defer c.client.AllowRebalance()
+	fetches.EachError(func(topic string, partition int32, err error) {
+		c.logger.Warn("kafka fetch error", "topic", topic, "partition", partition, "error", err)
+	})
+	return c.handleFetches(ctx, fetches, handle)
 }
 
 func (c *Consumer) handleFetches(ctx context.Context, fetches kgo.Fetches, handle RecordHandler) error {
