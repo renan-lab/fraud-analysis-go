@@ -27,7 +27,7 @@ Measures the analysis pipeline against the simulator's ground truth: did every a
 - Truth lines without `transaction_id` or with a status other than 202 are only counted (`not accepted`); the simulator report already checks their statuses.
 - A fraud sequence is (scenario, `card_id`) over fraud-labeled transactions. The first purchases of a burst pass by design, so per-transaction recall is lower than sequence recall.
 - `fraud-before-on-card`: a legit transaction flagged after a fraud on the same card (by `occurred_at`). The simulator still labels it legit; read these as label semantics, `clean-card` as real misfires.
-- A scenario can mix labels (`impossible_travel` sends a legit purchase at home first), so the scenario table has one row per scenario and label.
+- A scenario can mix labels (`impossible_travel` and `cloned_card_concurrent` send a legit purchase at home), so the scenario table has one row per scenario and label.
 - `missing > 0` with a running worker usually means `--wait` was too short or the worker uses another topic.
 
 ## Configuration
