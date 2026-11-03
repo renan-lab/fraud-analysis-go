@@ -28,8 +28,9 @@ func NewKafkaPublisher(producer MessageProducer, topic string) *KafkaPublisher {
 	return &KafkaPublisher{producer: producer, topic: topic}
 }
 
-// PublishTransactionAnalyzed sends ev keyed by transaction_id, so the decision
-// lands on the same partition number as the transaction it answers.
+// PublishTransactionAnalyzed sends ev keyed by transaction_id: its consumers
+// upsert by transaction and keep no per-account state, so they need no
+// per-account ordering, and the key spreads decisions evenly (ADR 0012).
 func (p *KafkaPublisher) PublishTransactionAnalyzed(ctx context.Context, ev events.TransactionAnalyzed) error {
 	value, err := json.Marshal(ev)
 	if err != nil {

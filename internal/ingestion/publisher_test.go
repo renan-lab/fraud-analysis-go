@@ -24,8 +24,8 @@ func TestKafkaPublisherBuildsMessage(t *testing.T) {
 		t.Fatalf("produced %d messages, want 1", len(producer.messages))
 	}
 	msg := producer.messages[0]
-	if msg.Topic != "topic-x" || string(msg.Key) != ev.Transaction.TransactionID {
-		t.Fatalf("message topic %q key %q, want topic-x keyed by transaction_id", msg.Topic, msg.Key)
+	if msg.Topic != "topic-x" || string(msg.Key) != ev.Transaction.AccountID {
+		t.Fatalf("message topic %q key %q, want topic-x keyed by account_id %q", msg.Topic, msg.Key, ev.Transaction.AccountID)
 	}
 	headers := map[string]string{}
 	for _, h := range msg.Headers {

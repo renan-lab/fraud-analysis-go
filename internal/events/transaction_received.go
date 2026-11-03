@@ -4,7 +4,8 @@ package events
 
 import "time"
 
-// TopicTransactionsReceived carries TransactionReceived, keyed by transaction_id.
+// TopicTransactionsReceived carries TransactionReceived, keyed by account_id
+// so one worker analyzes an account at a time (ADR 0012).
 const TopicTransactionsReceived = "transactions.received"
 
 const (

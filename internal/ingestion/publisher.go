@@ -39,8 +39,11 @@ func NewKafkaPublisher(producer MessageProducer, topic string, reg prometheus.Re
 	return &KafkaPublisher{producer: producer, topic: topic, duration: duration}
 }
 
-// PublishTransactionReceived sends ev keyed by transaction_id, so every event
-// of one transaction lands on the same partition, in order.
+// PublishTransactionReceived sends ev keyed by account_id, so every event of
+// one account (duplicates of a transaction_id included) lands on the same
+// partition and a single analysis worker reads them in order. analysis reads
+// and writes per-account state between Load and Record, so this key is what
+// keeps two workers from scoring the same account concurrently (ADR 0012).
 func (p *KafkaPublisher) PublishTransactionReceived(ctx context.Context, ev events.TransactionReceived) error {
 	msg, err := p.toMessage(ev)
 	if err != nil {
@@ -62,7 +65,7 @@ func (p *KafkaPublisher) toMessage(ev events.TransactionReceived) (kafka.Message
 	}
 	return kafka.Message{
 		Topic: p.topic,
-		Key:   []byte(ev.Transaction.TransactionID),
+		Key:   []byte(ev.Transaction.AccountID),
 		Value: value,
 		Headers: []kafka.Header{
 			{Key: events.HeaderEventType, Value: ev.EventType},
