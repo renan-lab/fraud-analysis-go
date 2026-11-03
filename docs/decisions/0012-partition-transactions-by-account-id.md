@@ -1,6 +1,6 @@
 # 0012. Partition transactions.received by account_id
 
-- Status: accepted
+- Status: accepted; the planned epoch fencing and retry abort in Consequences are superseded by [0013](0013-do-not-fence-feature-writes-by-group-epoch.md)
 - Date: 2026-11-03
 
 ## Context
